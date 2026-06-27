@@ -68,18 +68,30 @@ disco load ch1       # load a saved game
 disco saves          # list all saves
 ```
 
-### When a scene ends
+### ⚠ IMPORTANT: When a scene ends
 
-When the engine reports `⚠ This scene has ended`, you need to find the next location:
+When the output shows `⚠ This scene has ended` or `(stopped: scene_end)`, the current
+scene is over. **You MUST move to the next scene yourself — the game does NOT auto-advance
+between scenes.** Do NOT call `disco play` again (it will just repeat the ending).
 
+Instead, follow this pattern:
+
+1. Check your tasks: `disco status` — active tasks tell you where to go
+2. Search for the next scene: `disco scenes GARTE` or `disco scenes WHIRLING`
+3. Enter the new scene: `disco start <SCENE_ID>`
+
+Example flow after a scene ends:
 ```bash
-disco scenes WHIRLING    # search for scenes by keyword
-disco scenes GARTE       # find a specific NPC
-disco start <SCENE_ID>   # go to the next scene
+disco status              # see active tasks
+disco scenes GARTE        # find Garte's scene
+disco start 1274          # go there
+disco play                # continue playing
 ```
 
-The game flow is: explore a scene → make choices → scene ends → search for next location → start it.
-Your active tasks (shown in `disco status`) tell you where to go next.
+Common next destinations from scene 142 (your room door):
+- `disco start 1274` — go downstairs to talk to Garte (cafeteria manager)
+- `disco start 8` — go inspect the body behind the hotel
+- `disco scenes` — browse all available locations
 
 ### Dice checks
 
