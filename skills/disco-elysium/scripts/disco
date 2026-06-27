@@ -1,15 +1,37 @@
 #!/usr/bin/env node
 // disco — CLI for the Disco Elysium text-game engine.
-// Talks to the VPS via simple REST API (POST /api/<tool> with JSON body).
+// Talks to the VPS via REST API. Each AI gets its own player state.
+
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+const crypto = require("crypto");
 
 const DEFAULT_SERVER = "https://disco.royola.dev";
 const SERVER = (process.env.DISCO_SERVER || DEFAULT_SERVER).replace(/\/$/, "");
 const API = SERVER + "/api";
+const ID_FILE = path.join(os.homedir(), ".disco-player-id");
+
+function getPlayerId() {
+  try { return fs.readFileSync(ID_FILE, "utf-8").trim(); }
+  catch { return null; }
+}
+
+function ensurePlayerId() {
+  let id = getPlayerId();
+  if (!id) {
+    id = crypto.randomBytes(4).toString("hex");
+    fs.writeFileSync(ID_FILE, id, "utf-8");
+    console.error(`[disco] New player ID created: ${id}`);
+  }
+  return id;
+}
 
 async function callApi(tool, args = {}) {
+  const playerId = ensurePlayerId();
   const res = await fetch(`${API}/${tool}`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "X-Player-Id": playerId },
     body: JSON.stringify(args),
   });
   const text = await res.text();
@@ -28,8 +50,7 @@ const commands = {
     const choices = [];
     while (args.length) {
       const a = args.shift();
-      if (a === "--choice" || a === "-c") choices.push(parseInt(args.shift(), 10));
-      else if (a === "--no-auto") opts.autoAdvance = false;
+      if (a === "--no-auto") opts.autoAdvance = false;
       else if (a === "--stop") opts.stopAt = args.shift().split(",");
       else if (a === "--max") opts.maxSteps = parseInt(args.shift(), 10);
       else if (/^\d+$/.test(a)) choices.push(parseInt(a, 10));
@@ -51,12 +72,25 @@ const commands = {
     console.log(await callApi("scenes", opts));
   },
 
+  async players() { console.log(await callApi("players")); },
+
+  async whoami() {
+    const id = getPlayerId();
+    if (id) console.log(`You are player: ${id}`);
+    else console.log("No player ID yet. Run any command to create one.");
+  },
+
+  async reset() {
+    try { fs.unlinkSync(ID_FILE); } catch {}
+    console.log("Player ID cleared. Next command will create a new one.");
+  },
+
   async help() {
     console.log(`
 disco — play Disco Elysium via text
 
   disco start [SCENE_ID]     Start a new game (default: scene 1)
-  disco play [CHOICE...]     Advance. Pass choice indices: disco play 2  or  disco play 2 0 1
+  disco play [CHOICE...]     Advance. Pass choice indices: disco play 2
     --no-auto                 Don't auto-advance through single-option nodes
     --stop check,scene_end    Stop conditions (comma-separated)
     --max 50                  Max steps per call
@@ -66,10 +100,14 @@ disco — play Disco Elysium via text
   disco load [SLOT]           Load from slot
   disco saves                 List all save slots
   disco scenes [SEARCH]       List scenes, optionally filter by title
+  disco players               List all active players on the server
+  disco whoami                Show your player ID
+  disco reset                 Reset your player ID (start a fresh game)
   disco help                  This message
 
+Your player ID is stored in ~/.disco-player-id.
+Each AI/player gets independent game state. Use DISCO_PLAYER to override.
 Server: ${SERVER}
-Set DISCO_SERVER to override.
 `);
   },
 };

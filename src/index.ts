@@ -2,13 +2,18 @@ import { createServer as createHttpServer } from "node:http";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomUUID } from "node:crypto";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { createGameContext } from "./engine/context.js";
+import { RomDb } from "./rom/RomDb.js";
+import { PlayerManager, type PlayerContext } from "./engine/PlayerManager.js";
 import { createMcpServer } from "./mcp/server.js";
 import { attachWebSocket } from "./web/websocket.js";
 import { formatTrace, formatOptions } from "./engine/format.js";
+import type { GameContext } from "./engine/context.js";
+import type { WorldState } from "./state/WorldState.js";
+import type { Engine } from "./engine/Engine.js";
+import type { SaveStore } from "./state/SaveStore.js";
+import type { RomDb as RomDbType } from "./rom/RomDb.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.DISCO_DB ?? join(__dirname, "..", "data", "disco.db");
@@ -17,20 +22,25 @@ const PORT = parseInt(process.env.DISCO_PORT ?? "3000", 10);
 const MODE = process.env.DISCO_MODE ?? "both";
 
 async function main() {
-  const ctx = createGameContext(DB_PATH, SAVES_DIR);
+  const rom = new RomDb(DB_PATH);
+  const players = new PlayerManager(rom, SAVES_DIR);
 
   if (MODE === "stdio") {
-    const mcp = createMcpServer(ctx);
+    // stdio mode: single player, no ID needed
+    const ctx = players.getOrCreate("stdio");
+    const gameCtx: GameContext = { rom, state: ctx.state, registry: ctx.registry, engine: ctx.engine, saves: ctx.saves };
+    const mcp = createMcpServer(gameCtx);
     const transport = new StdioServerTransport();
     await mcp.connect(transport);
     console.error(`[disco] stdio MCP server ready (db: ${DB_PATH})`);
     return;
   }
 
-  const mcp = createMcpServer(ctx);
-  const httpTransport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined,
-  });
+  // MCP endpoint — single-player (uses default player for now)
+  const defaultCtx = players.getOrCreate("default");
+  const mcpGameCtx: GameContext = { rom, state: defaultCtx.state, registry: defaultCtx.registry, engine: defaultCtx.engine, saves: defaultCtx.saves };
+  const mcp = createMcpServer(mcpGameCtx);
+  const httpTransport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   await mcp.connect(httpTransport);
 
   const indexHtml = readFileSync(join(__dirname, "web", "public", "index.html"), "utf-8");
@@ -38,24 +48,32 @@ async function main() {
   const httpServer = createHttpServer(async (req, res) => {
     const url = req.url ?? "/";
 
-    // REST API for CLI / skill — direct engine calls, no MCP protocol overhead
+    // REST API: /api/<tool>  — playerId from header or body
     if (url.startsWith("/api/") && req.method === "POST") {
-      const toolName = url.slice(5);
+      const toolName = url.slice(5).split("?")[0]!;
       let body = "";
       for await (const chunk of req) body += chunk;
       const args = body ? JSON.parse(body) : {};
+
+      // playerId from header or body; auto-create if new
+      const playerId = (req.headers["x-player-id"] as string) || args.playerId || players.newPlayerId();
+      delete args.playerId;
+      const pctx = players.getOrCreate(playerId);
+
+      res.setHeader("X-Player-Id", playerId);
       const respond = (text: string) => {
         res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
         res.end(text);
       };
+
       try {
         switch (toolName) {
           case "start": {
             const id = args.sceneId ?? 1;
-            ctx.state.initFromRom(ctx.rom.getAllVariableDefs());
-            ctx.state.party.add("kim");
-            const result = ctx.engine.startScene(id);
-            const scene = ctx.rom.getScene(id);
+            pctx.state.initFromRom(rom.getAllVariableDefs());
+            pctx.state.party.add("kim");
+            const result = pctx.engine.startScene(id);
+            const scene = rom.getScene(id);
             respond(`=== SCENE ${id}: ${scene?.title ?? "?"} ===\n` +
               formatTrace(result.trace) + "\n\n=== OPTIONS ===\n" +
               formatOptions(result.options) +
@@ -63,7 +81,7 @@ async function main() {
             return;
           }
           case "play": {
-            const result = ctx.engine.play({
+            const result = pctx.engine.play({
               choices: args.choices,
               autoAdvance: args.autoAdvance ?? true,
               stopAt: args.stopAt,
@@ -75,8 +93,9 @@ async function main() {
             return;
           }
           case "status": {
-            const s = ctx.engine.getStatus();
+            const s = pctx.engine.getStatus();
             respond(
+              `Player: ${playerId}\n` +
               `Scene: ${s.scene} (conv ${s.currentConv}, dlg ${s.currentDlg})\n` +
               `Day ${s.day}, Hour ${s.hour}\nMoney: ${s.money} reál\n` +
               `Party: ${s.party.join(", ") || "alone"}\n` +
@@ -89,30 +108,30 @@ async function main() {
           }
           case "history": {
             const n = args.count ?? 20;
-            const recent = ctx.engine.history.slice(-n);
+            const recent = pctx.engine.history.slice(-n);
             respond(formatTrace(recent) || "(no history yet)");
             return;
           }
           case "save": {
-            await ctx.saves.save(args.slot ?? "auto", ctx.state.snapshot(), args.label ?? "");
-            respond(`Saved to slot "${args.slot ?? "auto"}"${args.label ? ` (${args.label})` : ""}`);
+            await pctx.saves.save(args.slot ?? "auto", pctx.state.snapshot(), args.label ?? "");
+            respond(`Saved to slot "${args.slot ?? "auto"}"${args.label ? ` (${args.label})` : ""} (player: ${playerId})`);
             return;
           }
           case "load": {
-            const data = await ctx.saves.load(args.slot ?? "auto");
+            const data = await pctx.saves.load(args.slot ?? "auto");
             if (!data) { respond(`No save found in slot "${args.slot ?? "auto"}"`); return; }
-            ctx.state.restore(data.state);
+            pctx.state.restore(data.state);
             respond(`Loaded slot "${args.slot ?? "auto"}" (${data.label})`);
             return;
           }
           case "saves": {
-            const saves = await ctx.saves.list();
+            const saves = await pctx.saves.list();
             if (!saves.length) { respond("(no saves)"); return; }
             respond(saves.map((s) => `"${s.slot}" — ${s.label} (${s.savedAt})`).join("\n"));
             return;
           }
           case "scenes": {
-            const all = ctx.rom.getAllScenes();
+            const all = rom.getAllScenes();
             let filtered = all;
             if (args.search) {
               const q = String(args.search).toLowerCase();
@@ -122,6 +141,12 @@ async function main() {
             const results = filtered.slice(0, lim);
             respond(`Showing ${results.length}/${filtered.length} scenes${args.search ? ` matching "${args.search}"` : ""}:\n` +
               results.map((s) => `  [${s.id}] ${s.title}`).join("\n"));
+            return;
+          }
+          case "players": {
+            const list = players.list();
+            if (!list.length) { respond("(no active players)"); return; }
+            respond(list.map((p) => `${p.playerId}: ${p.scene} (last active: ${p.lastActive})`).join("\n"));
             return;
           }
           default:
@@ -147,10 +172,15 @@ async function main() {
     res.writeHead(404).end("Not found");
   });
 
-  attachWebSocket(httpServer, ctx);
+  // WebSocket: attach to default player for now
+  attachWebSocket(httpServer, mcpGameCtx);
+
+  // Cleanup idle players every 10 min
+  setInterval(() => players.cleanup(), 600_000);
 
   httpServer.listen(PORT, () => {
     console.log(`[disco] server ready on port ${PORT}`);
+    console.log(`  REST API:      http://localhost:${PORT}/api/<tool>`);
     console.log(`  MCP endpoint:  http://localhost:${PORT}/mcp`);
     console.log(`  Observer page: http://localhost:${PORT}/`);
     console.log(`  DB: ${DB_PATH}`);
