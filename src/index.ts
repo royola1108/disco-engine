@@ -97,9 +97,17 @@ async function main() {
               stopAt: args.stopAt,
               maxSteps: args.maxSteps ?? 100,
             });
-            respond(formatTrace(result.trace) + "\n\n=== OPTIONS ===\n" +
+            let text = formatTrace(result.trace) + "\n\n=== OPTIONS ===\n" +
               formatOptions(result.options) +
-              `\n\n(stopped: ${result.stoppedAt}, steps: ${result.stepsTaken}, position: conv ${result.currentConv} dlg ${result.currentDlg})`);
+              `\n\n(stopped: ${result.stoppedAt}, steps: ${result.stepsTaken}, position: conv ${result.currentConv} dlg ${result.currentDlg})`;
+            if (result.stoppedAt === "scene_end" && result.options.length === 0) {
+              const activeTasks = p.engine.getStatus().activeTasks;
+              text += "\n\n⚠ This scene has ended. Use `disco scenes <keyword>` to find the next location, then `disco start <SCENE_ID>` to go there.";
+              if (activeTasks.length) {
+                text += `\nActive tasks to follow up:\n  ${activeTasks.join("\n  ")}`;
+              }
+            }
+            respond(text);
             return;
           }
           case "status": {

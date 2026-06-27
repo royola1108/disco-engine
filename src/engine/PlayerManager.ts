@@ -41,7 +41,7 @@ export class PlayerManager {
     state.party.add("kim");
 
     const registry = new FunctionRegistry();
-    registerDiscoFunctions(registry, state);
+    registerDiscoFunctions(registry, state, this.rom);
 
     const engine = new Engine(this.rom, state, registry);
     const saves = new SaveStore(join(this.savesRoot, playerId));

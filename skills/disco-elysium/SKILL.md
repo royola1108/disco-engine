@@ -68,6 +68,19 @@ disco load ch1       # load a saved game
 disco saves          # list all saves
 ```
 
+### When a scene ends
+
+When the engine reports `⚠ This scene has ended`, you need to find the next location:
+
+```bash
+disco scenes WHIRLING    # search for scenes by keyword
+disco scenes GARTE       # find a specific NPC
+disco start <SCENE_ID>   # go to the next scene
+```
+
+The game flow is: explore a scene → make choices → scene ends → search for next location → start it.
+Your active tasks (shown in `disco status`) tell you where to go next.
+
 ### Dice checks
 
 When the engine encounters a **skill check**, it rolls 2d6 + your skill level + modifiers

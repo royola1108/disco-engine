@@ -40,6 +40,7 @@ export class WorldState {
   copotype: string | null = null;
   flags = new Map<string, boolean>();
   meta = new Map<string, Value>();
+  gotoScene: number | null = null;
 
   initFromRom(defs: VariableDef[]): void {
     this.variables.clear();

@@ -21,7 +21,7 @@ export function createGameContext(dbPath: string, savesDir: string): GameContext
 
   state.initFromRom(rom.getAllVariableDefs());
   state.party.add("kim");
-  registerDiscoFunctions(registry, state);
+  registerDiscoFunctions(registry, state, rom);
 
   const engine = new Engine(rom, state, registry);
 

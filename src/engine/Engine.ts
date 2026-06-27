@@ -228,6 +228,16 @@ export class Engine extends EventEmitter {
       const options = this.getVisibleOptions(node);
 
       if (options.length === 0) {
+        // Check if a GoTo was triggered by userscript on this node
+        if (this.state.gotoScene != null) {
+          const nextScene = this.state.gotoScene;
+          this.state.gotoScene = null;
+          addTrace({ type: "scene_end", message: `Scene ${this.currentConv} ended → transitioning to scene ${nextScene}` });
+          this.emit("scene:end", this.currentConv);
+          this.currentConv = nextScene;
+          this.currentDlg = START_DIALOGUE_ID;
+          continue;
+        }
         addTrace({ type: "scene_end", message: `Scene ${this.currentConv} ended (no options)` });
         this.emit("scene:end", this.currentConv);
         stopReason = "scene_end";

@@ -1,8 +1,10 @@
 import type { FunctionRegistry, HostFn } from "../../engine/eval.js";
 import type { WorldState } from "../../state/WorldState.js";
 import { boolish, numish, type Value } from "../../engine/ast.js";
+import { resolveGoTo } from "./areaMap.js";
+import type { RomDb } from "../../rom/RomDb.js";
 
-export function registerDiscoFunctions(registry: FunctionRegistry, state: WorldState): void {
+export function registerDiscoFunctions(registry: FunctionRegistry, state: WorldState, rom: RomDb): void {
   const reg = (name: string, fn: HostFn) => registry.register(name, fn);
 
   const str = (v: Value | undefined): string => (v == null ? "" : String(v));
@@ -189,8 +191,18 @@ export function registerDiscoFunctions(registry: FunctionRegistry, state: WorldS
   // ========== AREA / TRAVEL ==========
   reg("IsExterior", () => boolish(getVar("auto.is_exterior")));
   reg("SetAreaState", ([area, s]) => { if (area != null) setVar(`area.${str(area)}.state`, s ?? 0); });
-  reg("GoTo", ([dest]) => { if (dest != null) setVar("auto.current_location", str(dest)); });
-  reg("GoToDestination", ([dest]) => { if (dest != null) setVar("auto.current_location", str(dest)); });
+  reg("GoTo", ([dest]) => {
+    if (dest != null) {
+      const sceneId = resolveGoTo(str(dest), rom);
+      if (sceneId != null) state.gotoScene = sceneId;
+    }
+  });
+  reg("GoToDestination", ([dest]) => {
+    if (dest != null) {
+      const sceneId = resolveGoTo(str(dest), rom);
+      if (sceneId != null) state.gotoScene = sceneId;
+    }
+  });
 
   // ========== VISUAL / NO-OP (text version ignores these) ==========
   for (const noop of [
