@@ -37,6 +37,11 @@
   .conn-status { position: fixed; top: 8px; right: 340px; font-size: 11px; }
   .conn-ok { color: var(--success); }
   .conn-err { color: var(--fail); }
+  #player-bar { margin-bottom: 12px; }
+  #player-bar select { background: var(--bg); color: var(--text); border: 1px solid #2a2a4a; border-radius: 4px; padding: 4px 8px; font-size: 13px; width: 100%; }
+  #player-bar button { background: var(--accent); color: white; border: none; border-radius: 4px; padding: 4px 10px; font-size: 12px; cursor: pointer; margin-top: 4px; }
+  #player-bar button:hover { opacity: 0.85; }
+  .player-id { font-size: 11px; color: var(--dim); margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -46,6 +51,12 @@
   <div id="options-area"></div>
 </div>
 <div id="sidebar">
+  <div id="player-bar">
+    <h2>Observer</h2>
+    <select id="player-select"></select>
+    <div class="player-id" id="current-player"></div>
+    <button id="refresh-players">Refresh player list</button>
+  </div>
   <h2>Status</h2>
   <div class="stat-grid" id="stats"></div>
   <h2>Active Tasks</h2>
@@ -57,6 +68,12 @@ const optArea = document.getElementById('options-area');
 const statsEl = document.getElementById('stats');
 const tasksEl = document.getElementById('tasks');
 const connEl = document.getElementById('conn');
+const playerSelect = document.getElementById('player-select');
+const currentPlayerEl = document.getElementById('current-player');
+const refreshBtn = document.getElementById('refresh-players');
+
+let currentWs = null;
+let selectedPlayer = null;
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
@@ -66,6 +83,8 @@ function addEntry(html) {
   feed.appendChild(div);
   feed.parentElement.scrollTop = feed.parentElement.scrollHeight;
 }
+
+function clearFeed() { feed.innerHTML = ''; optArea.innerHTML = ''; }
 
 function updateStats(s) {
   statsEl.innerHTML = `
@@ -79,42 +98,79 @@ function updateStats(s) {
   tasksEl.innerHTML = s.activeTasks.length ? s.activeTasks.map(t => `<li>${esc(t)}</li>`).join('') : '<li style="color:#555">(none)</li>';
 }
 
-const ws = new WebSocket(`ws://${location.host}/ws`);
-ws.onopen = () => { connEl.textContent = '● live'; connEl.className = 'conn-status conn-ok'; };
-ws.onclose = () => { connEl.textContent = '● disconnected'; connEl.className = 'conn-status conn-err'; };
+async function loadPlayers() {
+  try {
+    const res = await fetch('/api/players', { method: 'POST', headers: {'content-type':'application/json'}, body: '{}' });
+    const text = await res.text();
+    const lines = text.trim().split('\n').filter(l => l && !l.startsWith('(no'));
+    playerSelect.innerHTML = lines.map(l => {
+      const id = l.split(':')[0].trim();
+      const label = l.length > 50 ? l.slice(0,50)+'...' : l;
+      return `<option value="${esc(id)}">${esc(label)}</option>`;
+    }).join('') || '<option>(no active players)</option>';
+    if (selectedPlayer) playerSelect.value = selectedPlayer;
+  } catch (e) { playerSelect.innerHTML = '<option>(failed to load)</option>'; }
+}
 
-ws.onmessage = (ev) => {
-  const msg = JSON.parse(ev.data);
-  switch (msg.type) {
-    case 'text':
-      addEntry(`<div class="entry text"><div class="actor">${esc(msg.actorName || '?')}</div><div>${esc(msg.text)}</div></div>`);
-      break;
-    case 'check':
-      const c = msg.result;
-      addEntry(`<div class="entry check"><b>${esc(c.skill)}</b> (diff ${c.difficulty}, ${c.isRed ? 'RED' : 'WHITE'}) — rolled ${c.rolls[0]}+${c.rolls[1]}=${c.rolls[0]+c.rolls[1]}, total ${c.total} → <span class="${c.passed ? 'pass' : 'fail'}">${c.passed ? 'SUCCESS' : 'FAILURE'}</span></div>`);
-      break;
-    case 'choose':
-      addEntry(`<div class="entry choose">▶ [${msg.index}] ${esc(msg.option.text)}</div>`);
-      break;
-    case 'options':
-      optArea.innerHTML = `<div class="options"><h3>Options</h3>${msg.options.map(o => `<div class="option"><span class="idx">[${o.index}]</span>${esc(o.actorName ? o.actorName+': ' : '')}${esc(o.text)}</div>`).join('')}</div>`;
-      break;
-    case 'var_change':
-      addEntry(`<div class="entry var">⚙ ${esc(msg.name)}: ${esc(String(msg.oldVal))} → ${esc(String(msg.newVal))}</div>`);
-      break;
-    case 'scene_end':
-      addEntry(`<div class="entry scene-end">— scene ${msg.conv} ended —</div>`);
-      break;
-    case 'status':
-      updateStats(msg.status);
-      if (msg.history) for (const e of msg.history) {
-        if (e.type === 'text') addEntry(`<div class="entry text"><div class="actor">${esc(e.actorName||'')}</div><div>${esc(e.text||'')}</div></div>`);
-        else if (e.type === 'choose') addEntry(`<div class="entry choose">▶ [${e.optionIndex}] ${esc(e.optionText||'')}</div>`);
-      }
-      break;
+function connectWs(playerId) {
+  if (currentWs) { currentWs.close(); currentWs = null; }
+  clearFeed();
+  connEl.textContent = 'connecting...';
+  connEl.className = 'conn-status';
+
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${proto}//${location.host}/ws${playerId ? '?player=' + playerId : ''}`;
+  currentWs = new WebSocket(wsUrl);
+
+  currentWs.onopen = () => { connEl.textContent = '● live'; connEl.className = 'conn-status conn-ok'; };
+  currentWs.onclose = () => { connEl.textContent = '● disconnected'; connEl.className = 'conn-status conn-err'; };
+
+  currentWs.onmessage = (ev) => {
+    const msg = JSON.parse(ev.data);
+    switch (msg.type) {
+      case 'text':
+        addEntry(`<div class="entry text"><div class="actor">${esc(msg.actorName || '?')}</div><div>${esc(msg.text)}</div></div>`);
+        break;
+      case 'check':
+        const c = msg.result;
+        addEntry(`<div class="entry check"><b>${esc(c.skill)}</b> (diff ${c.difficulty}, ${c.isRed ? 'RED' : 'WHITE'}) — rolled ${c.rolls[0]}+${c.rolls[1]}=${c.rolls[0]+c.rolls[1]}, total ${c.total} → <span class="${c.passed ? 'pass' : 'fail'}">${c.passed ? 'SUCCESS' : 'FAILURE'}</span></div>`);
+        break;
+      case 'choose':
+        addEntry(`<div class="entry choose">▶ [${msg.index}] ${esc(msg.option.text)}</div>`);
+        break;
+      case 'options':
+        optArea.innerHTML = `<div class="options"><h3>Options</h3>${msg.options.map(o => `<div class="option"><span class="idx">[${o.index}]</span>${esc(o.actorName ? o.actorName+': ' : '')}${esc(o.text)}</div>`).join('')}</div>`;
+        break;
+      case 'var_change':
+        addEntry(`<div class="entry var">⚙ ${esc(msg.name)}: ${esc(String(msg.oldVal))} → ${esc(String(msg.newVal))}</div>`);
+        break;
+      case 'scene_end':
+        addEntry(`<div class="entry scene-end">— scene ${msg.conv} ended —</div>`);
+        break;
+      case 'status':
+        updateStats(msg.status);
+        currentPlayerEl.textContent = msg.playerId ? `Watching: ${msg.playerId}` : '';
+        if (msg.history) for (const e of msg.history) {
+          if (e.type === 'text') addEntry(`<div class="entry text"><div class="actor">${esc(e.actorName||'')}</div><div>${esc(e.text||'')}</div></div>`);
+          else if (e.type === 'choose') addEntry(`<div class="entry choose">▶ [${e.optionIndex}] ${esc(e.optionText||'')}</div>`);
+        }
+        break;
+    }
+    if (msg.status) updateStats(msg.status);
+  };
+}
+
+playerSelect.onchange = () => {
+  selectedPlayer = playerSelect.value;
+  if (selectedPlayer && selectedPlayer !== '(no active players)') {
+    connectWs(selectedPlayer);
   }
-  if (msg.status) updateStats(msg.status);
 };
+
+refreshBtn.onclick = loadPlayers;
+
+loadPlayers();
+connectWs(null);
 </script>
 </body>
 </html>

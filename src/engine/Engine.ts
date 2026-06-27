@@ -154,10 +154,16 @@ export class Engine extends EventEmitter {
   private runSequence(node: DialogueNode): void {
     if (!node.sequence || !node.sequence.trim()) return;
     if (node.sequence === "0" || node.sequence === "") return;
-    this.scriptRunner.run(node.sequence, {
-      getVar: this.getVar,
-      setVar: this.setVartracked,
-    });
+    try {
+      this.scriptRunner.run(node.sequence, {
+        getVar: this.getVar,
+        setVar: this.setVartracked,
+      });
+    } catch {
+      // sequence commands may include audio/camera directives with
+      // syntax the parser doesn't handle (paths, @params, etc.)
+      // they're visual/audio no-ops in text mode — silently skip
+    }
   }
 
   play(params: PlayParams = {}): PlayResult {

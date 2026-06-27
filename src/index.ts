@@ -172,8 +172,8 @@ async function main() {
     res.writeHead(404).end("Not found");
   });
 
-  // WebSocket: attach to default player for now
-  attachWebSocket(httpServer, mcpGameCtx);
+  // WebSocket: multi-player observer
+  attachWebSocket(httpServer, players);
 
   // Cleanup idle players every 10 min
   setInterval(() => players.cleanup(), 600_000);
