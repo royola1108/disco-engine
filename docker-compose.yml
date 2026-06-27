@@ -1,0 +1,34 @@
+services:
+  disco:
+    build: .
+    container_name: disco-engine
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+    expose:
+      - "3000"
+    environment:
+      - DISCO_DB=/app/data/disco.db
+      - DISCO_SAVES=/app/data/saves
+      - DISCO_PORT=3000
+      - DISCO_MODE=both
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: disco-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    depends_on:
+      - disco
+
+volumes:
+  caddy_data:
+  caddy_config:

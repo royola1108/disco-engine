@@ -1,0 +1,10 @@
+node_modules
+dist
+data
+saves
+*.db
+*.db-journal
+.git
+.env
+*.log
+*.err

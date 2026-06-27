@@ -1,0 +1,96 @@
+#!/usr/bin/env node
+// disco — CLI for the Disco Elysium text-game engine.
+// Talks to the VPS via simple REST API (POST /api/<tool> with JSON body).
+
+const DEFAULT_SERVER = "https://disco.royola.dev";
+const SERVER = (process.env.DISCO_SERVER || DEFAULT_SERVER).replace(/\/$/, "");
+const API = SERVER + "/api";
+
+async function callApi(tool, args = {}) {
+  const res = await fetch(`${API}/${tool}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(args),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text);
+  return text;
+}
+
+const commands = {
+  async start(args) {
+    const sceneId = args[0] ? parseInt(args[0], 10) : undefined;
+    console.log(await callApi("start", { sceneId }));
+  },
+
+  async play(args) {
+    const opts = {};
+    const choices = [];
+    while (args.length) {
+      const a = args.shift();
+      if (a === "--choice" || a === "-c") choices.push(parseInt(args.shift(), 10));
+      else if (a === "--no-auto") opts.autoAdvance = false;
+      else if (a === "--stop") opts.stopAt = args.shift().split(",");
+      else if (a === "--max") opts.maxSteps = parseInt(args.shift(), 10);
+      else if (/^\d+$/.test(a)) choices.push(parseInt(a, 10));
+    }
+    if (choices.length) opts.choices = choices;
+    console.log(await callApi("play", opts));
+  },
+
+  async status() { console.log(await callApi("status")); },
+  async history(args) { console.log(await callApi("history", { count: args[0] ? parseInt(args[0], 10) : 20 })); },
+  async save(args) { console.log(await callApi("save", { slot: args[0] || "auto", label: args[1] || "" })); },
+  async load(args) { console.log(await callApi("load", { slot: args[0] || "auto" })); },
+  async saves() { console.log(await callApi("saves")); },
+
+  async scenes(args) {
+    const opts = {};
+    if (args[0] && args[0] !== "--all") opts.search = args[0];
+    opts.limit = args[0] === "--all" ? 1428 : 20;
+    console.log(await callApi("scenes", opts));
+  },
+
+  async help() {
+    console.log(`
+disco — play Disco Elysium via text
+
+  disco start [SCENE_ID]     Start a new game (default: scene 1)
+  disco play [CHOICE...]     Advance. Pass choice indices: disco play 2  or  disco play 2 0 1
+    --no-auto                 Don't auto-advance through single-option nodes
+    --stop check,scene_end    Stop conditions (comma-separated)
+    --max 50                  Max steps per call
+  disco status                Current game state snapshot
+  disco history [N]           Recent N trace entries (default 20)
+  disco save [SLOT] [LABEL]   Save to slot (default: auto)
+  disco load [SLOT]           Load from slot
+  disco saves                 List all save slots
+  disco scenes [SEARCH]       List scenes, optionally filter by title
+  disco help                  This message
+
+Server: ${SERVER}
+Set DISCO_SERVER to override.
+`);
+  },
+};
+
+async function main() {
+  const [cmd, ...args] = process.argv.slice(2);
+  if (!cmd || cmd === "help" || cmd === "--help" || cmd === "-h") {
+    await commands.help();
+    return;
+  }
+  const fn = commands[cmd];
+  if (!fn) {
+    console.error(`Unknown command: ${cmd}. Run \`disco help\`.`);
+    process.exit(1);
+  }
+  try {
+    await fn(args);
+  } catch (e) {
+    console.error(`Error: ${e.message}`);
+    process.exit(1);
+  }
+}
+
+main();

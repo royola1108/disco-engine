@@ -1,0 +1,23 @@
+{
+  "name": "disco-engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Generic text-game engine for AI playthroughs. Reads a SQLite ROM (graph + rules + world state), runs a dialogue-tree engine with condition/script/check resolution, and exposes a live observer web UI. First dataset: Disco Elysium.",
+  "scripts": {
+    "play": "tsx src/index.ts",
+    "stdio": "DISCO_MODE=stdio tsx src/index.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,20 @@
+{$DOMAIN} {
+    encode gzip
+
+    # MCP endpoint — needs to support SSE streaming and long connections
+    handle /mcp {
+        reverse_proxy disco:3000 {
+            flush_interval -1
+        }
+    }
+
+    # WebSocket observer
+    handle /ws {
+        reverse_proxy disco:3000
+    }
+
+    # Observer web page
+    handle {
+        reverse_proxy disco:3000
+    }
+}
