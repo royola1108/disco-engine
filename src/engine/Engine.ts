@@ -180,6 +180,7 @@ export class Engine extends EventEmitter {
     let choiceIdx = 0;
     let lastOptions: Option[] = [];
     let stopReason: StopReason = "max_steps";
+    const visited = new Set<string>();
 
     const addTrace = (e: TraceEntry) => {
       trace.push(e);
@@ -188,6 +189,9 @@ export class Engine extends EventEmitter {
 
     while (stepsTaken < maxSteps) {
       stepsTaken++;
+      const nodeKey = `${this.currentConv}:${this.currentDlg}`;
+      const alreadyVisited = visited.has(nodeKey);
+      visited.add(nodeKey);
       const node = this.rom.getNode(this.currentConv, this.currentDlg);
       if (!node) {
         addTrace({ type: "info", message: `Node not found: (${this.currentConv},${this.currentDlg})` });
@@ -257,8 +261,16 @@ export class Engine extends EventEmitter {
       }
 
       // Connector nodes: auto-advance through them (they're just routing, not choices)
+      // But don't loop — if destination already visited, stop and show options
       if (isConn && autoAdvance && options.length >= 1) {
         const opt = options[0]!;
+        const destKey = `${opt.destinationConv}:${opt.destinationDlg}`;
+        if (visited.has(destKey) && choices.length === 0) {
+          lastOptions = options;
+          this.emit("options:show", options);
+          stopReason = "no_choices";
+          break;
+        }
         this.currentConv = opt.destinationConv;
         this.currentDlg = opt.destinationDlg;
         continue;
@@ -266,6 +278,13 @@ export class Engine extends EventEmitter {
 
       if (options.length === 1 && autoAdvance) {
         const opt = options[0]!;
+        const destKey = `${opt.destinationConv}:${opt.destinationDlg}`;
+        if (visited.has(destKey) && choices.length === 0) {
+          lastOptions = options;
+          this.emit("options:show", options);
+          stopReason = "no_choices";
+          break;
+        }
         this.currentConv = opt.destinationConv;
         this.currentDlg = opt.destinationDlg;
         continue;
