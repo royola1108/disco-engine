@@ -197,7 +197,9 @@ export class Engine extends EventEmitter {
 
       this.emit("node:enter", this.currentConv, this.currentDlg);
 
-      if (!this.isConnector(node)) {
+      const isConn = this.isConnector(node);
+
+      if (!isConn) {
         const text = this.resolveText(node);
         if (text) {
           const actorName = this.rom.actorName(node.actor);
@@ -208,6 +210,17 @@ export class Engine extends EventEmitter {
 
       this.runNodeScript(node);
       this.runSequence(node);
+
+      // Check for GoTo triggered by script
+      if (this.state.gotoScene != null) {
+        const nextScene = this.state.gotoScene;
+        this.state.gotoScene = null;
+        addTrace({ type: "scene_end", message: `Scene ${this.currentConv} → transitioning to scene ${nextScene}` });
+        this.emit("scene:end", this.currentConv);
+        this.currentConv = nextScene;
+        this.currentDlg = START_DIALOGUE_ID;
+        continue;
+      }
 
       if (node.hascheck === 1) {
         const check = this.rom.getCheck(node.conversationid, node.id);
@@ -228,7 +241,6 @@ export class Engine extends EventEmitter {
       const options = this.getVisibleOptions(node);
 
       if (options.length === 0) {
-        // Check if a GoTo was triggered by userscript on this node
         if (this.state.gotoScene != null) {
           const nextScene = this.state.gotoScene;
           this.state.gotoScene = null;
@@ -242,6 +254,14 @@ export class Engine extends EventEmitter {
         this.emit("scene:end", this.currentConv);
         stopReason = "scene_end";
         break;
+      }
+
+      // Connector nodes: auto-advance through them (they're just routing, not choices)
+      if (isConn && autoAdvance && options.length >= 1) {
+        const opt = options[0]!;
+        this.currentConv = opt.destinationConv;
+        this.currentDlg = opt.destinationDlg;
+        continue;
       }
 
       if (options.length === 1 && autoAdvance) {
