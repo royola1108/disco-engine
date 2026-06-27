@@ -55,10 +55,15 @@ async function main() {
       for await (const chunk of req) body += chunk;
       const args = body ? JSON.parse(body) : {};
 
-      // playerId from header or body; auto-create if new
+      // playerId from header or body
       const playerId = (req.headers["x-player-id"] as string) || args.playerId || players.newPlayerId();
       delete args.playerId;
-      const pctx = players.getOrCreate(playerId);
+
+      // players/scenes are global — don't create a player just to list them
+      const globalTools = new Set(["players", "scenes"]);
+      const pctx = globalTools.has(toolName)
+        ? null
+        : players.getOrCreate(playerId);
 
       res.setHeader("X-Player-Id", playerId);
       const respond = (text: string) => {
@@ -67,12 +72,17 @@ async function main() {
       };
 
       try {
+        if (!pctx && !globalTools.has(toolName)) {
+          respond("Error: no player context");
+          return;
+        }
+        const p = pctx!;
         switch (toolName) {
           case "start": {
-            const id = args.sceneId ?? 1;
-            pctx.state.initFromRom(rom.getAllVariableDefs());
-            pctx.state.party.add("kim");
-            const result = pctx.engine.startScene(id);
+            const id = args.sceneId ?? 142;
+            p.state.initFromRom(rom.getAllVariableDefs());
+            p.state.party.add("kim");
+            const result = p.engine.startScene(id);
             const scene = rom.getScene(id);
             respond(`=== SCENE ${id}: ${scene?.title ?? "?"} ===\n` +
               formatTrace(result.trace) + "\n\n=== OPTIONS ===\n" +
@@ -81,7 +91,7 @@ async function main() {
             return;
           }
           case "play": {
-            const result = pctx.engine.play({
+            const result = p.engine.play({
               choices: args.choices,
               autoAdvance: args.autoAdvance ?? true,
               stopAt: args.stopAt,
@@ -93,7 +103,7 @@ async function main() {
             return;
           }
           case "status": {
-            const s = pctx.engine.getStatus();
+            const s = p.engine.getStatus();
             respond(
               `Player: ${playerId}\n` +
               `Scene: ${s.scene} (conv ${s.currentConv}, dlg ${s.currentDlg})\n` +
@@ -108,24 +118,24 @@ async function main() {
           }
           case "history": {
             const n = args.count ?? 20;
-            const recent = pctx.engine.history.slice(-n);
+            const recent = p.engine.history.slice(-n);
             respond(formatTrace(recent) || "(no history yet)");
             return;
           }
           case "save": {
-            await pctx.saves.save(args.slot ?? "auto", pctx.state.snapshot(), args.label ?? "");
+            await p.saves.save(args.slot ?? "auto", p.state.snapshot(), args.label ?? "");
             respond(`Saved to slot "${args.slot ?? "auto"}"${args.label ? ` (${args.label})` : ""} (player: ${playerId})`);
             return;
           }
           case "load": {
-            const data = await pctx.saves.load(args.slot ?? "auto");
+            const data = await p.saves.load(args.slot ?? "auto");
             if (!data) { respond(`No save found in slot "${args.slot ?? "auto"}"`); return; }
-            pctx.state.restore(data.state);
+            p.state.restore(data.state);
             respond(`Loaded slot "${args.slot ?? "auto"}" (${data.label})`);
             return;
           }
           case "saves": {
-            const saves = await pctx.saves.list();
+            const saves = await p.saves.list();
             if (!saves.length) { respond("(no saves)"); return; }
             respond(saves.map((s) => `"${s.slot}" — ${s.label} (${s.savedAt})`).join("\n"));
             return;
@@ -165,7 +175,7 @@ async function main() {
       return;
     }
     if (url === "/" || url === "/index.html") {
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache, no-store, must-revalidate" });
       res.end(indexHtml);
       return;
     }

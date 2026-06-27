@@ -89,7 +89,7 @@ const commands = {
     console.log(`
 disco — play Disco Elysium via text
 
-  disco start [SCENE_ID]     Start a new game (default: scene 1)
+  disco start [SCENE_ID]     Start a new game (default: scene 142 — Whirling-in-Rags, Day 1)
   disco play [CHOICE...]     Advance. Pass choice indices: disco play 2
     --no-auto                 Don't auto-advance through single-option nodes
     --stop check,scene_end    Stop conditions (comma-separated)

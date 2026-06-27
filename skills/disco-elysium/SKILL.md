@@ -34,7 +34,7 @@ The game engine runs on a remote server. You interact via the `disco` CLI.
 ### Start the game
 
 ```bash
-disco start          # begin from the first real scene (Whirling-in-Rags, Day 1)
+disco start          # begin from the opening scene (Whirling-in-Rags, Day 1 — scene 142)
 disco start 142      # jump to a specific scene if you know the ID
 ```
 
