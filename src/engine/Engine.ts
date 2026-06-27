@@ -260,9 +260,9 @@ export class Engine extends EventEmitter {
         break;
       }
 
-      // Connector nodes: auto-advance through them (they're just routing, not choices)
-      // But don't loop — if destination already visited, stop and show options
-      if (isConn && autoAdvance && options.length >= 1) {
+      // Connector nodes with only 1 option: auto-advance (just routing)
+      // Connector nodes with multiple options: treat as decision point, stop
+      if (isConn && autoAdvance && options.length === 1) {
         const opt = options[0]!;
         const destKey = `${opt.destinationConv}:${opt.destinationDlg}`;
         if (visited.has(destKey) && choices.length === 0) {

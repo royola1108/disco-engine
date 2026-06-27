@@ -42,9 +42,26 @@
   #player-bar button { background: var(--accent); color: white; border: none; border-radius: 4px; padding: 4px 10px; font-size: 12px; cursor: pointer; margin-top: 4px; }
   #player-bar button:hover { opacity: 0.85; }
   .player-id { font-size: 11px; color: var(--dim); margin-top: 4px; }
+  #login-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  #login-box { background: var(--panel); padding: 24px 32px; border-radius: 12px; text-align: center; }
+  #login-box h2 { margin-bottom: 12px; }
+  #login-box input { background: var(--bg); color: var(--text); border: 1px solid #2a2a4a; border-radius: 6px; padding: 8px 12px; font-size: 14px; width: 240px; margin-bottom: 8px; }
+  #login-box button { background: var(--accent); color: white; border: none; border-radius: 6px; padding: 8px 24px; font-size: 14px; cursor: pointer; }
+  #login-box button:hover { opacity: 0.85; }
+  #login-error { color: var(--fail); font-size: 12px; margin-top: 8px; min-height: 16px; }
 </style>
 </head>
 <body>
+<div id="login-overlay" style="display:none">
+  <div id="login-box">
+    <h2>Disco Elysium Observer</h2>
+    <p style="color:var(--dim);font-size:12px;margin-bottom:16px">Enter access token</p>
+    <input type="password" id="token-input" placeholder="Token" autocomplete="off">
+    <br>
+    <button id="token-submit">Enter</button>
+    <div id="login-error"></div>
+  </div>
+</div>
 <div id="dialogue">
   <span class="conn-status" id="conn">connecting...</span>
   <div id="feed"></div>
@@ -98,9 +115,13 @@ function updateStats(s) {
   tasksEl.innerHTML = s.activeTasks.length ? s.activeTasks.map(t => `<li>${esc(t)}</li>`).join('') : '<li style="color:#555">(none)</li>';
 }
 
+function getToken() { return localStorage.getItem('disco-token') || ''; }
+function setToken(t) { localStorage.setItem('disco-token', t); }
+
 async function loadPlayers() {
   try {
-    const res = await fetch('/api/players', { method: 'POST', headers: {'content-type':'application/json'}, body: '{}' });
+    const res = await fetch('/api/players', { method: 'POST', headers: {'content-type':'application/json','X-Auth-Token':getToken()}, body: '{}' });
+    if (res.status === 401) { showLogin(); return; }
     const text = await res.text();
     const lines = text.trim().split('\n').filter(l => l && !l.startsWith('(no'));
     playerSelect.innerHTML = lines.map(l => {
@@ -119,11 +140,20 @@ function connectWs(playerId) {
   connEl.className = 'conn-status';
 
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${proto}//${location.host}/ws${playerId ? '?player=' + playerId : ''}`;
+  const token = getToken();
+  const params = new URLSearchParams();
+  if (playerId) params.set('player', playerId);
+  if (token) params.set('token', token);
+  const qs = params.toString();
+  const wsUrl = `${proto}//${location.host}/ws${qs ? '?' + qs : ''}`;
   currentWs = new WebSocket(wsUrl);
 
   currentWs.onopen = () => { connEl.textContent = '● live'; connEl.className = 'conn-status conn-ok'; };
-  currentWs.onclose = () => { connEl.textContent = '● disconnected'; connEl.className = 'conn-status conn-err'; };
+  currentWs.onclose = (e) => {
+    connEl.textContent = '● disconnected';
+    connEl.className = 'conn-status conn-err';
+    if (e.code === 4001) { localStorage.removeItem('disco-token'); showLogin(); }
+  };
 
   currentWs.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
@@ -160,6 +190,35 @@ function connectWs(playerId) {
   };
 }
 
+// Login logic
+const loginOverlay = document.getElementById('login-overlay');
+const tokenInput = document.getElementById('token-input');
+const tokenSubmit = document.getElementById('token-submit');
+const loginError = document.getElementById('login-error');
+
+function showLogin() {
+  loginOverlay.style.display = 'flex';
+  tokenInput.focus();
+}
+
+function hideLogin() {
+  loginOverlay.style.display = 'none';
+}
+
+tokenSubmit.onclick = async () => {
+  const token = tokenInput.value.trim();
+  if (!token) { loginError.textContent = 'Please enter a token'; return; }
+  // Test token against API
+  const res = await fetch('/api/players', { method: 'POST', headers: {'content-type':'application/json','X-Auth-Token':token}, body: '{}' });
+  if (res.status === 401) { loginError.textContent = 'Invalid token'; return; }
+  setToken(token);
+  hideLogin();
+  loadPlayers();
+  connectWs(null);
+};
+
+tokenInput.onkeydown = (e) => { if (e.key === 'Enter') tokenSubmit.click(); };
+
 playerSelect.onchange = () => {
   selectedPlayer = playerSelect.value;
   if (selectedPlayer && selectedPlayer !== '(no active players)') {
@@ -169,8 +228,13 @@ playerSelect.onchange = () => {
 
 refreshBtn.onclick = loadPlayers;
 
-loadPlayers();
-connectWs(null);
+// Init: check token, show login if missing
+if (!getToken()) {
+  showLogin();
+} else {
+  loadPlayers();
+  connectWs(null);
+}
 </script>
 </body>
 </html>

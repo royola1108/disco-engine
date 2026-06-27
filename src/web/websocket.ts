@@ -17,7 +17,7 @@ interface ClientInfo {
   ctx: PlayerContext | null;
 }
 
-export function attachWebSocket(httpServer: Server, players: PlayerManager): WebSocketServer {
+export function attachWebSocket(httpServer: Server, players: PlayerManager, authToken: string): WebSocketServer {
   const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
   const clients = new Map<WebSocket, ClientInfo>();
 
@@ -63,7 +63,21 @@ export function attachWebSocket(httpServer: Server, players: PlayerManager): Web
     return p || null;
   }
 
+  function parseToken(req: IncomingMessage): string | null {
+    const url = new URL(req.url ?? "/ws", "http://x");
+    return url.searchParams.get("token");
+  }
+
   wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
+    // Auth check
+    if (authToken) {
+      const token = parseToken(req);
+      if (token !== authToken) {
+        ws.close(4001, "Unauthorized");
+        return;
+      }
+    }
+
     const playerId = parsePlayerId(req);
     let pctx: PlayerContext | null = null;
 

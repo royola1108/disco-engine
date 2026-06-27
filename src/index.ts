@@ -20,6 +20,7 @@ const DB_PATH = process.env.DISCO_DB ?? join(__dirname, "..", "data", "disco.db"
 const SAVES_DIR = process.env.DISCO_SAVES ?? join(__dirname, "..", "saves");
 const PORT = parseInt(process.env.DISCO_PORT ?? "3000", 10);
 const MODE = process.env.DISCO_MODE ?? "both";
+const AUTH_TOKEN = process.env.DISCO_TOKEN ?? "";
 
 async function main() {
   const rom = new RomDb(DB_PATH);
@@ -50,6 +51,15 @@ async function main() {
 
     // REST API: /api/<tool>  — playerId from header or body
     if (url.startsWith("/api/") && req.method === "POST") {
+      // Auth check
+      if (AUTH_TOKEN) {
+        const token = req.headers["x-auth-token"] as string;
+        if (token !== AUTH_TOKEN) {
+          res.writeHead(401, { "Content-Type": "text/plain" });
+          res.end("Unauthorized: invalid or missing token. Set X-Auth-Token header.");
+          return;
+        }
+      }
       const toolName = url.slice(5).split("?")[0]!;
       let body = "";
       for await (const chunk of req) body += chunk;
@@ -191,7 +201,7 @@ async function main() {
   });
 
   // WebSocket: multi-player observer
-  attachWebSocket(httpServer, players);
+  attachWebSocket(httpServer, players, AUTH_TOKEN);
 
   // Cleanup idle players every 10 min
   setInterval(() => players.cleanup(), 600_000);

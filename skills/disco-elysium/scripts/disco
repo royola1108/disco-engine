@@ -11,6 +11,13 @@ const DEFAULT_SERVER = "https://disco.royola.dev";
 const SERVER = (process.env.DISCO_SERVER || DEFAULT_SERVER).replace(/\/$/, "");
 const API = SERVER + "/api";
 const ID_FILE = path.join(os.homedir(), ".disco-player-id");
+const TOKEN_FILE = path.join(os.homedir(), ".disco-token");
+
+function getToken() {
+  // env var overrides file
+  if (process.env.DISCO_TOKEN) return process.env.DISCO_TOKEN;
+  try { return fs.readFileSync(TOKEN_FILE, "utf-8").trim(); } catch { return ""; }
+}
 
 function getPlayerId() {
   try { return fs.readFileSync(ID_FILE, "utf-8").trim(); }
@@ -29,17 +36,38 @@ function ensurePlayerId() {
 
 async function callApi(tool, args = {}) {
   const playerId = ensurePlayerId();
+  const token = getToken();
+  const headers = { "content-type": "application/json", "X-Player-Id": playerId };
+  if (token) headers["X-Auth-Token"] = token;
   const res = await fetch(`${API}/${tool}`, {
     method: "POST",
-    headers: { "content-type": "application/json", "X-Player-Id": playerId },
+    headers,
     body: JSON.stringify(args),
   });
+  if (res.status === 401) {
+    console.error("Unauthorized: invalid or missing token.");
+    console.error(`Set your token: echo 'YOUR_TOKEN' > ~/.disco-token`);
+    console.error("Or:     DISCO_TOKEN=YOUR_TOKEN disco start");
+    process.exit(1);
+  }
   const text = await res.text();
   if (!res.ok) throw new Error(text);
   return text;
 }
 
 const commands = {
+  async token(args) {
+    const t = args[0];
+    if (!t) {
+      const existing = getToken();
+      if (existing) console.log(`Token is set (${existing.slice(0,4)}...)`);
+      else console.log("No token set. Usage: disco token YOUR_TOKEN");
+      return;
+    }
+    fs.writeFileSync(TOKEN_FILE, t, "utf-8");
+    console.log(`Token saved to ~/.disco-token`);
+  },
+
   async start(args) {
     const sceneId = args[0] ? parseInt(args[0], 10) : undefined;
     console.log(await callApi("start", { sceneId }));
@@ -103,10 +131,12 @@ disco — play Disco Elysium via text
   disco players               List all active players on the server
   disco whoami                Show your player ID
   disco reset                 Reset your player ID (start a fresh game)
+  disco token [TOKEN]         Set or check your access token
   disco help                  This message
 
 Your player ID is stored in ~/.disco-player-id.
-Each AI/player gets independent game state. Use DISCO_PLAYER to override.
+Your access token is stored in ~/.disco-token (or set DISCO_TOKEN env var).
+Each AI/player gets independent game state. Use DISCO_SERVER to override.
 Server: ${SERVER}
 `);
   },
