@@ -141,15 +141,21 @@ async function main() {
             return;
           }
           case "save": {
-            await p.saves.save(args.slot ?? "auto", p.state.snapshot(), args.label ?? "");
-            respond(`Saved to slot "${args.slot ?? "auto"}"${args.label ? ` (${args.label})` : ""} (player: ${playerId})`);
+            await p.saves.save(args.slot ?? "auto", p.state.snapshot(), p.engine.currentConv, p.engine.currentDlg, args.label ?? "");
+            respond(`Saved to slot "${args.slot ?? "auto"}"${args.label ? ` (${args.label})` : ""} (player: ${playerId}, scene: ${p.engine.currentConv})`);
             return;
           }
           case "load": {
             const data = await p.saves.load(args.slot ?? "auto");
             if (!data) { respond(`No save found in slot "${args.slot ?? "auto"}"`); return; }
             p.state.restore(data.state);
-            respond(`Loaded slot "${args.slot ?? "auto"}" (${data.label})`);
+            if (data.currentConv != null && data.currentConv > 0) {
+              p.engine.currentConv = data.currentConv;
+              p.engine.currentDlg = data.currentDlg ?? 0;
+              respond(`Loaded slot "${args.slot ?? "auto"}" (${data.label}) — position: conv ${p.engine.currentConv} dlg ${p.engine.currentDlg}`);
+            } else {
+              respond(`Loaded slot "${args.slot ?? "auto"}" (${data.label}) — state restored, but position unknown (old save). Use \`disco start <SCENE_ID>\` to continue from a known scene.`);
+            }
             return;
           }
           case "saves": {

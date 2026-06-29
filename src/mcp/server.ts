@@ -145,8 +145,8 @@ export function createMcpServer(ctx: GameContext): McpServer {
       },
     },
     async ({ slot, label }) => {
-      await ctx.saves.save(slot, ctx.state.snapshot(), label ?? "");
-      return textResult(`Saved to slot "${slot}"${label ? ` (${label})` : ""}`);
+      await ctx.saves.save(slot, ctx.state.snapshot(), ctx.engine.currentConv, ctx.engine.currentDlg, label ?? "");
+      return textResult(`Saved to slot "${slot}"${label ? ` (${label})` : ""} (scene: ${ctx.engine.currentConv})`);
     }
   );
 
@@ -154,7 +154,7 @@ export function createMcpServer(ctx: GameContext): McpServer {
     "disco.load",
     {
       title: "Load Game",
-      description: "Load a saved game state from a named slot. Restores all variables, inventory, party, time, etc.",
+      description: "Load a saved game state from a named slot. Restores all variables, inventory, party, time, and current position.",
       inputSchema: {
         slot: z.string().describe("Save slot name to load."),
       },
@@ -163,7 +163,11 @@ export function createMcpServer(ctx: GameContext): McpServer {
       const data = await ctx.saves.load(slot);
       if (!data) return textResult(`No save found in slot "${slot}"`);
       ctx.state.restore(data.state);
-      return textResult(`Loaded slot "${slot}" (${data.label})`);
+      if (data.currentConv != null) {
+        ctx.engine.currentConv = data.currentConv;
+        ctx.engine.currentDlg = data.currentDlg ?? 0;
+      }
+      return textResult(`Loaded slot "${slot}" (${data.label}) — position: conv ${ctx.engine.currentConv} dlg ${ctx.engine.currentDlg}`);
     }
   );
 

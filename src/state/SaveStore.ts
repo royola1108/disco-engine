@@ -5,6 +5,8 @@ import type { WorldStateData } from "./WorldState.js";
 export interface SaveSlot {
   slot: string;
   state: WorldStateData;
+  currentConv: number;
+  currentDlg: number;
   persona: unknown;
   savedAt: string;
   label: string;
@@ -13,11 +15,13 @@ export interface SaveSlot {
 export class SaveStore {
   constructor(private dir: string) {}
 
-  async save(slot: string, state: WorldStateData, label = "", persona: unknown = null): Promise<void> {
+  async save(slot: string, state: WorldStateData, currentConv: number, currentDlg: number, label = "", persona: unknown = null): Promise<void> {
     await fs.mkdir(this.dir, { recursive: true });
     const data: SaveSlot = {
       slot,
       state,
+      currentConv,
+      currentDlg,
       persona,
       savedAt: new Date().toISOString(),
       label,
