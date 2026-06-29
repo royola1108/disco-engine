@@ -8,3 +8,4 @@ saves/
 server.err
 server.log
 .token-temp
+data/tokens.txt

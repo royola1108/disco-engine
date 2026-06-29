@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server, IncomingMessage } from "node:http";
 import type { PlayerManager, PlayerContext } from "../engine/PlayerManager.js";
+import type { TokenManager } from "../engine/TokenManager.js";
 import type { CheckResult } from "../engine/CheckResolver.js";
 import type { Option } from "../engine/Engine.js";
 import type { Value } from "../engine/ast.js";
@@ -17,7 +18,7 @@ interface ClientInfo {
   ctx: PlayerContext | null;
 }
 
-export function attachWebSocket(httpServer: Server, players: PlayerManager, authToken: string): WebSocketServer {
+export function attachWebSocket(httpServer: Server, players: PlayerManager, tokens: TokenManager): WebSocketServer {
   const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
   const clients = new Map<WebSocket, ClientInfo>();
 
@@ -57,28 +58,19 @@ export function attachWebSocket(httpServer: Server, players: PlayerManager, auth
     });
   }
 
-  function parsePlayerId(req: IncomingMessage): string | null {
-    const url = new URL(req.url ?? "/ws", "http://x");
-    const p = url.searchParams.get("player");
-    return p || null;
-  }
-
-  function parseToken(req: IncomingMessage): string | null {
-    const url = new URL(req.url ?? "/ws", "http://x");
-    return url.searchParams.get("token");
-  }
-
   wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
-    // Auth check
-    if (authToken) {
-      const token = parseToken(req);
-      if (token !== authToken) {
-        ws.close(4001, "Unauthorized");
-        return;
-      }
+    // Auth check — token from query param
+    const url = new URL(req.url ?? "/ws", "http://x");
+    const token = url.searchParams.get("token");
+    if (!token || !tokens.valid(token)) {
+      ws.close(4001, "Unauthorized");
+      return;
     }
 
-    const playerId = parsePlayerId(req);
+    // playerId from token, optional player override for observer
+    const tokenPlayerId = tokens.playerId(token);
+    const overridePlayer = url.searchParams.get("player");
+    const playerId = overridePlayer || tokenPlayerId;
     let pctx: PlayerContext | null = null;
 
     if (playerId) {

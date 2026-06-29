@@ -1,33 +1,30 @@
-import { createServer as createHttpServer } from "node:http";
+import { createServer as createHttpServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { RomDb } from "./rom/RomDb.js";
-import { PlayerManager, type PlayerContext } from "./engine/PlayerManager.js";
+import { PlayerManager } from "./engine/PlayerManager.js";
+import { TokenManager } from "./engine/TokenManager.js";
 import { createMcpServer } from "./mcp/server.js";
 import { attachWebSocket } from "./web/websocket.js";
 import { formatTrace, formatOptions } from "./engine/format.js";
 import type { GameContext } from "./engine/context.js";
-import type { WorldState } from "./state/WorldState.js";
-import type { Engine } from "./engine/Engine.js";
-import type { SaveStore } from "./state/SaveStore.js";
-import type { RomDb as RomDbType } from "./rom/RomDb.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.DISCO_DB ?? join(__dirname, "..", "data", "disco.db");
 const SAVES_DIR = process.env.DISCO_SAVES ?? join(__dirname, "..", "saves");
+const TOKEN_FILE = process.env.DISCO_TOKENS ?? join(__dirname, "..", "data", "tokens.txt");
 const PORT = parseInt(process.env.DISCO_PORT ?? "3000", 10);
 const MODE = process.env.DISCO_MODE ?? "both";
-const AUTH_TOKEN = process.env.DISCO_TOKEN ?? "";
 
 async function main() {
   const rom = new RomDb(DB_PATH);
   const players = new PlayerManager(rom, SAVES_DIR);
+  const tokens = new TokenManager(TOKEN_FILE);
 
   if (MODE === "stdio") {
-    // stdio mode: single player, no ID needed
     const ctx = players.getOrCreate("stdio");
     const gameCtx: GameContext = { rom, state: ctx.state, registry: ctx.registry, engine: ctx.engine, saves: ctx.saves };
     const mcp = createMcpServer(gameCtx);
@@ -37,43 +34,43 @@ async function main() {
     return;
   }
 
-  // MCP endpoint — single-player (uses default player for now)
-  const defaultCtx = players.getOrCreate("default");
-  const mcpGameCtx: GameContext = { rom, state: defaultCtx.state, registry: defaultCtx.registry, engine: defaultCtx.engine, saves: defaultCtx.saves };
-  const mcp = createMcpServer(mcpGameCtx);
-  const httpTransport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-  await mcp.connect(httpTransport);
-
   const indexHtml = readFileSync(join(__dirname, "web", "public", "index.html"), "utf-8");
+
+  // Helper: extract token from request (header or query param)
+  function getToken(req: IncomingMessage): string | null {
+    const headerToken = req.headers["x-auth-token"] as string | undefined;
+    if (headerToken) return headerToken;
+    const url = new URL(req.url ?? "/", "http://x");
+    const queryToken = url.searchParams.get("token");
+    return queryToken || null;
+  }
+
+  // Helper: auth check, returns playerId or sends 401
+  function authCheck(req: IncomingMessage, res: ServerResponse): string | null {
+    const token = getToken(req);
+    if (!token || !tokens.valid(token)) {
+      res.writeHead(401, { "Content-Type": "text/plain" });
+      res.end("Unauthorized: invalid or missing token");
+      return null;
+    }
+    return tokens.playerId(token);
+  }
 
   const httpServer = createHttpServer(async (req, res) => {
     const url = req.url ?? "/";
 
-    // REST API: /api/<tool>  — playerId from header or body
+    // REST API: /api/<tool>
     if (url.startsWith("/api/") && req.method === "POST") {
-      // Auth check
-      if (AUTH_TOKEN) {
-        const token = req.headers["x-auth-token"] as string;
-        if (token !== AUTH_TOKEN) {
-          res.writeHead(401, { "Content-Type": "text/plain" });
-          res.end("Unauthorized: invalid or missing token. Set X-Auth-Token header.");
-          return;
-        }
-      }
+      const playerId = authCheck(req, res);
+      if (!playerId) return;
+
       const toolName = url.slice(5).split("?")[0]!;
       let body = "";
       for await (const chunk of req) body += chunk;
       const args = body ? JSON.parse(body) : {};
 
-      // playerId from header or body
-      const playerId = (req.headers["x-player-id"] as string) || args.playerId || players.newPlayerId();
-      delete args.playerId;
-
-      // players/scenes are global — don't create a player just to list them
       const globalTools = new Set(["players", "scenes"]);
-      const pctx = globalTools.has(toolName)
-        ? null
-        : players.getOrCreate(playerId);
+      const pctx = globalTools.has(toolName) ? null : players.getOrCreate(playerId);
 
       res.setHeader("X-Player-Id", playerId);
       const respond = (text: string) => {
@@ -154,7 +151,7 @@ async function main() {
               p.engine.currentDlg = data.currentDlg ?? 0;
               respond(`Loaded slot "${args.slot ?? "auto"}" (${data.label}) — position: conv ${p.engine.currentConv} dlg ${p.engine.currentDlg}`);
             } else {
-              respond(`Loaded slot "${args.slot ?? "auto"}" (${data.label}) — state restored, but position unknown (old save). Use \`disco start <SCENE_ID>\` to continue from a known scene.`);
+              respond(`Loaded slot "${args.slot ?? "auto"}" (${data.label}) — state restored, but position unknown (old save). Use \`disco start <SCENE_ID>\` to continue.`);
             }
             return;
           }
@@ -194,10 +191,28 @@ async function main() {
       return;
     }
 
-    if (url === "/mcp" && (req.method === "POST" || req.method === "GET" || req.method === "DELETE")) {
-      await httpTransport.handleRequest(req, res);
+    // MCP endpoint — token from query param, player from token
+    if (url.startsWith("/mcp") && (req.method === "POST" || req.method === "GET" || req.method === "DELETE")) {
+      const token = getToken(req);
+      if (!token || !tokens.valid(token)) {
+        res.writeHead(401, { "Content-Type": "text/plain" });
+        res.end("Unauthorized: invalid or missing token. Add ?token=YOUR_TOKEN to the MCP URL.");
+        return;
+      }
+      const playerId = tokens.playerId(token);
+      const pctx = players.getOrCreate(playerId);
+      const gameCtx: GameContext = { rom, state: pctx.state, registry: pctx.registry, engine: pctx.engine, saves: pctx.saves };
+
+      // Create a per-request MCP server instance (stateless mode)
+      const mcp = createMcpServer(gameCtx);
+      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+      await mcp.connect(transport);
+      // Strip the ?token= from URL so MCP transport doesn't choke on it
+      req.url = "/mcp";
+      await transport.handleRequest(req, res);
       return;
     }
+
     if (url === "/" || url === "/index.html") {
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-cache, no-store, must-revalidate" });
       res.end(indexHtml);
@@ -206,8 +221,8 @@ async function main() {
     res.writeHead(404).end("Not found");
   });
 
-  // WebSocket: multi-player observer
-  attachWebSocket(httpServer, players, AUTH_TOKEN);
+  // WebSocket: multi-player observer with token auth
+  attachWebSocket(httpServer, players, tokens);
 
   // Cleanup idle players every 10 min
   setInterval(() => players.cleanup(), 600_000);
@@ -215,9 +230,10 @@ async function main() {
   httpServer.listen(PORT, () => {
     console.log(`[disco] server ready on port ${PORT}`);
     console.log(`  REST API:      http://localhost:${PORT}/api/<tool>`);
-    console.log(`  MCP endpoint:  http://localhost:${PORT}/mcp`);
+    console.log(`  MCP endpoint:  http://localhost:${PORT}/mcp?token=YOUR_TOKEN`);
     console.log(`  Observer page: http://localhost:${PORT}/`);
     console.log(`  DB: ${DB_PATH}`);
+    console.log(`  Tokens: ${TOKEN_FILE} (${tokens.list().length} tokens)`);
   });
 }
 
