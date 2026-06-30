@@ -7,7 +7,7 @@ export type Expr =
   | { kind: "unary"; op: "not" | "neg"; operand: Expr }
   | {
       kind: "binary";
-      op: "and" | "or" | "==" | ">" | ">=" | "<" | "<=";
+      op: "and" | "or" | "==" | ">" | ">=" | "<" | "<=" | "+";
       left: Expr;
       right: Expr;
     };

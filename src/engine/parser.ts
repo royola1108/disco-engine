@@ -10,6 +10,7 @@ export type TokenKind =
   | "rbracket"
   | "comma"
   | "semicolon"
+  | "plus"
   | "eq"
   | "ge"
   | "le"
@@ -86,6 +87,7 @@ export function lexCond(input: string): Token[] {
     if (ch === "]") { push("rbracket", ch); i++; continue; }
     if (ch === ",") { push("comma", ch); i++; continue; }
     if (ch === ";") { push("semicolon", ch); i++; continue; }
+    if (ch === "+") { push("plus", ch); i++; continue; }
     if (ch === "=" && input[i + 1] === "=") { push("eq", "=="); i += 2; continue; }
     if (ch === ">" && input[i + 1] === "=") { push("ge", ">="); i += 2; continue; }
     if (ch === "<" && input[i + 1] === "=") { push("le", "<="); i += 2; continue; }
@@ -184,13 +186,22 @@ export class CondParser {
     return this.parseCmp();
   }
   private parseCmp(): Expr {
-    const left = this.parsePrimary();
+    const left = this.parseAdd();
     const t = this.cur();
     if (t.kind === "eq" || t.kind === "ge" || t.kind === "le" || t.kind === "gt" || t.kind === "lt") {
       const op = t.kind === "eq" ? "==" : t.kind === "ge" ? ">=" : t.kind === "le" ? "<=" : t.kind === "gt" ? ">" : "<";
       this.p++;
-      const right = this.parsePrimary();
+      const right = this.parseAdd();
       return { kind: "binary", op, left, right };
+    }
+    return left;
+  }
+  private parseAdd(): Expr {
+    let left = this.parsePrimary();
+    while (this.cur().kind === "plus") {
+      this.p++;
+      const right = this.parsePrimary();
+      left = { kind: "binary", op: "+", left, right };
     }
     return left;
   }

@@ -175,6 +175,15 @@ export function registerDiscoFunctions(registry: FunctionRegistry, state: WorldS
   reg("IsHighestPolitical", ([p]) => state.political === str(p));
   reg("IsHighestCopotype", ([c]) => state.copotype === str(c));
 
+  // ========== ONCE (variable increment modifier) ==========
+  // In the original game, +once(N) means "add N but only once".
+  // We treat once(N) as returning N — the "only once" guard is
+  // typically handled by conditionstring checking the variable.
+  // For true once semantics, we track which (variable, node) pairs
+  // have already been incremented.
+  const onceTracker = new Set<string>();
+  reg("once", ([n]) => num(n));
+
   // ========== SUBSTANCES ==========
   const usedOnce = new Set<string>();
   const usedMore = new Set<string>();

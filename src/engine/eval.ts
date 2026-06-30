@@ -55,6 +55,7 @@ function evalExpr(e: Expr, ctx: EvalContext): Value {
         case ">=": return numish(l) >= numish(r);
         case "<": return numish(l) < numish(r);
         case "<=": return numish(l) <= numish(r);
+        case "+": return numish(l) + numish(r);
       }
     }
   }
