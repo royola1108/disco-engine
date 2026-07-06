@@ -170,7 +170,7 @@ export class Engine extends EventEmitter {
     const {
       choices = [],
       autoAdvance = true,
-      stopAt = ["no_choices", "check"],
+      stopAt = ["no_choices"],
       maxSteps = 100,
     } = params;
 
@@ -232,13 +232,10 @@ export class Engine extends EventEmitter {
           const result = this.checkResolver.resolve(check, node.conversationid, node.id);
           addTrace({ type: "check", check: result });
           this.emit("check:roll", result);
-          if (stopSet.has("check")) {
-            const opts = this.getVisibleOptions(node);
-            lastOptions = opts;
-            this.emit("options:show", opts);
-            stopReason = "check";
-            break;
-          }
+          // Don't stop at check — continue to the success/failure branch.
+          // The check result is written to flagname, which determines
+          // which downstream node is visible (conditionstring filters).
+          // We only stop if the NEXT node after check is a real decision point.
         }
       }
 
