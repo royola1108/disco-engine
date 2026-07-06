@@ -174,7 +174,12 @@ export function registerDiscoFunctions(registry: FunctionRegistry, state: WorldS
   reg("IsTHCCooking", ([thc]) => state.thc.cooking === str(thc));
   reg("IsTHCCookingOrFixed", ([thc]) => state.thc.cooking === str(thc) || state.thc.fixed.includes(str(thc)));
   reg("GainThought", ([thought]) => {
-    if (thought != null && !state.thc.known.includes(str(thought))) state.thc.known.push(str(thought));
+    if (thought != null) {
+      const name = str(thought);
+      if (!state.thc.known.includes(name)) state.thc.known.push(name);
+      // Thought Cabinet research not implemented — auto-fix on gain
+      if (!state.thc.fixed.includes(name)) state.thc.fixed.push(name);
+    }
   });
 
   // ========== POLITICAL / COPOTYPE ==========
