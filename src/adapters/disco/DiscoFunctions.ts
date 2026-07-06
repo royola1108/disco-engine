@@ -164,7 +164,13 @@ export function registerDiscoFunctions(registry: FunctionRegistry, state: WorldS
 
   // ========== THOUGHT CABINET (THC) ==========
   reg("IsTHCPresent", ([thc]) => state.thc.known.includes(str(thc)) || state.thc.fixed.includes(str(thc)));
-  reg("IsTHCFixed", ([thc]) => state.thc.fixed.includes(str(thc)));
+  reg("IsTHCFixed", ([thc]) => {
+    const name = str(thc);
+    // Thought Cabinet not implemented — simulate "internalized" for key thoughts
+    // that are gated behind completing their prerequisite dialogue
+    if (name === "advanced_race_theory" && boolish(getVar("gates.mhead_race_white_hub_completed"))) return true;
+    return state.thc.fixed.includes(name);
+  });
   reg("IsTHCCooking", ([thc]) => state.thc.cooking === str(thc));
   reg("IsTHCCookingOrFixed", ([thc]) => state.thc.cooking === str(thc) || state.thc.fixed.includes(str(thc)));
   reg("GainThought", ([thought]) => {
