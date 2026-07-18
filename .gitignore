@@ -9,3 +9,4 @@ server.err
 server.log
 .token-temp
 data/tokens.txt
+check-skills.py
