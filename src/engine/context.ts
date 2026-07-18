@@ -5,6 +5,14 @@ import { FunctionRegistry } from "../engine/eval.js";
 import { Engine } from "../engine/Engine.js";
 import { registerDiscoFunctions } from "../adapters/disco/DiscoFunctions.js";
 
+const ALL_SKILLS = [
+  "Logic", "Encyclopedia", "Rhetoric", "Drama", "Conceptualization", "Visual Calculus",
+  "Volition", "Inland Empire", "Empathy", "Authority", "Esprit de Corps", "Suggestion",
+  "Endurance", "Pain Threshold", "Physical Instrument", "Electrochemistry", "Shivers", "Half Light",
+  "Hand/Eye Coordination", "Perception", "Perception (Hearing)", "Perception (Sight)",
+  "Reaction Speed", "Savoir Faire", "Interfacing", "Composure",
+];
+
 export interface GameContext {
   rom: RomDb;
   state: WorldState;
@@ -20,6 +28,7 @@ export function createGameContext(dbPath: string, savesDir: string): GameContext
   const saves = new SaveStore(savesDir);
 
   state.initFromRom(rom.getAllVariableDefs());
+  state.initSkills("balanced", ALL_SKILLS);
   state.party.add("kim");
   registerDiscoFunctions(registry, state, rom);
 

@@ -26,7 +26,7 @@ export class CheckResolver {
     const isRed = check.isred === 1;
     const flagName = check.flagname;
 
-    const skillVal = (this.state.getVar(`character.${skill.toLowerCase().replace(/[^a-z]/g, "_")}`) as number) || 0;
+    const skillVal = this.state.getSkill(skill);
 
     const modRows = this.getModifiers(convId, dlgId);
     const mods: { name: string; value: number; tooltip: string }[] = [];

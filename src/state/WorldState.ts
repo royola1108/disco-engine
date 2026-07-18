@@ -1,5 +1,6 @@
 import type { Value } from "../engine/ast.js";
 import type { VariableDef } from "../engine/types.js";
+import { getSkillValue } from "../adapters/disco/builds.js";
 
 export interface Skills {
   volition: { current: number; damage: number };
@@ -30,6 +31,8 @@ export class WorldState {
   party = new Set<string>();
   time = { day: 1, hour: 9, totalHours: 0 };
   reputation = new Map<string, number>();
+  build: string = "balanced";
+  skillValues = new Map<string, number>();
   skills: Skills = {
     volition: { current: 0, damage: 0 },
     endurance: { current: 0, damage: 0 },
@@ -41,6 +44,17 @@ export class WorldState {
   flags = new Map<string, boolean>();
   meta = new Map<string, Value>();
   gotoScene: number | null = null;
+
+  initSkills(buildName: string, allSkills: string[]): void {
+    this.build = buildName;
+    for (const skill of allSkills) {
+      this.skillValues.set(skill, getSkillValue(skill, buildName));
+    }
+  }
+
+  getSkill(skillName: string): number {
+    return this.skillValues.get(skillName) ?? 1;
+  }
 
   initFromRom(defs: VariableDef[]): void {
     this.variables.clear();

@@ -68,9 +68,29 @@ const commands = {
     console.log(`Token saved to ~/.disco-token`);
   },
 
+  async build(args) {
+    const name = args[0];
+    if (!name) {
+      console.log("Available builds: thinker, sensitive, physical, balanced (default)");
+      console.log("Usage: disco build physical");
+      return;
+    }
+    console.log(await callApi("build", { build: name }));
+  },
+
   async start(args) {
-    const sceneId = args[0] ? parseInt(args[0], 10) : undefined;
-    console.log(await callApi("start", { sceneId }));
+    const sceneId = args.find(a => /^\d+$/.test(a)) ? parseInt(args.find(a => /^\d+$/.test(a)), 10) : undefined;
+    const build = args.find(a => a.startsWith("--build="))?.split("=")[1];
+    console.log(await callApi("start", { sceneId, build }));
+  },
+
+  async build(args) {
+    const name = args[0];
+    if (!name) {
+      console.log("Available builds: thinker, sensitive, physical, balanced (default)");
+      return;
+    }
+    console.log(await callApi("build", { build: name }));
   },
 
   async play(args) {
@@ -117,7 +137,9 @@ const commands = {
     console.log(`
 disco — play Disco Elysium via text
 
-  disco start [SCENE_ID]     Start a new game (default: scene 142 — Whirling-in-Rags, Day 1)
+  disco start [SCENE_ID] [--build=thinker|sensitive|physical|balanced]
+                            Start a new game (default: scene 142, build: balanced)
+  disco build [NAME]          Change character build (thinker/sensitive/physical/balanced)
   disco play [CHOICE...]     Advance. Pass choice indices: disco play 2
     --no-auto                 Don't auto-advance through single-option nodes
     --stop check,scene_end    Stop conditions (comma-separated)

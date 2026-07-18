@@ -12,6 +12,14 @@ import { attachWebSocket } from "./web/websocket.js";
 import { formatTrace, formatOptions } from "./engine/format.js";
 import type { GameContext } from "./engine/context.js";
 
+const ALL_SKILLS = [
+  "Logic", "Encyclopedia", "Rhetoric", "Drama", "Conceptualization", "Visual Calculus",
+  "Volition", "Inland Empire", "Empathy", "Authority", "Esprit de Corps", "Suggestion",
+  "Endurance", "Pain Threshold", "Physical Instrument", "Electrochemistry", "Shivers", "Half Light",
+  "Hand/Eye Coordination", "Perception", "Perception (Hearing)", "Perception (Sight)",
+  "Reaction Speed", "Savoir Faire", "Interfacing", "Composure",
+];
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.DISCO_DB ?? join(__dirname, "..", "data", "disco.db");
 const SAVES_DIR = process.env.DISCO_SAVES ?? join(__dirname, "..", "saves");
@@ -87,14 +95,25 @@ async function main() {
         switch (toolName) {
           case "start": {
             const id = args.sceneId ?? 142;
+            const build = args.build ?? "balanced";
             p.state.initFromRom(rom.getAllVariableDefs());
+            p.state.initSkills(build, ALL_SKILLS);
             p.state.party.add("kim");
             const result = p.engine.startScene(id);
             const scene = rom.getScene(id);
             respond(`=== SCENE ${id}: ${scene?.title ?? "?"} ===\n` +
+              `[Character build: ${build}] ` +
               formatTrace(result.trace) + "\n\n=== OPTIONS ===\n" +
               formatOptions(result.options) +
               `\n\n(stopped: ${result.stoppedAt}, steps: ${result.stepsTaken})`);
+            return;
+          }
+          case "build": {
+            const build = args.build ?? "balanced";
+            p.state.initSkills(build, ALL_SKILLS);
+            respond(`Character build changed to: ${build}\n` +
+              `Skill values:\n` +
+              ALL_SKILLS.map(s => `  ${s}: ${p.state.getSkill(s)}`).join("\n"));
             return;
           }
           case "play": {
