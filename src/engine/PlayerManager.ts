@@ -7,13 +7,7 @@ import { registerDiscoFunctions } from "../adapters/disco/DiscoFunctions.js";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
-const ALL_SKILLS = [
-  "Logic", "Encyclopedia", "Rhetoric", "Drama", "Conceptualization", "Visual Calculus",
-  "Volition", "Inland Empire", "Empathy", "Authority", "Esprit de Corps", "Suggestion",
-  "Endurance", "Pain Threshold", "Physical Instrument", "Electrochemistry", "Shivers", "Half Light",
-  "Hand/Eye Coordination", "Perception", "Perception (Hearing)", "Perception (Sight)",
-  "Reaction Speed", "Savoir Faire", "Interfacing", "Composure",
-];
+import { ALL_SKILLS } from "../adapters/disco/builds.js";
 
 export interface PlayerContext {
   playerId: string;

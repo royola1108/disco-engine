@@ -34,7 +34,7 @@ The game engine runs on a remote server. You interact via the `disco` CLI.
 ### Start the game
 
 ```bash
-disco start          # begin from the opening scene (Whirling-in-Rags, Day 1 — scene 142)
+disco start --reset  # start a fresh game (clears current progress); begin from the opening scene (Whirling-in-Rags, Day 1 — scene 142)
 disco start 142      # jump to a specific scene if you know the ID
 ```
 
@@ -139,3 +139,7 @@ to the user in whatever language they prefer. The dialogue itself stays in Engli
 The engine is hosted at `https://disco.royola.dev`. Set `DISCO_SERVER` to override.
 The server runs in stateless mode — each CLI invocation is self-contained, no
 session management needed. Game state persists on the server between calls.
+
+Scene changes with `disco start <SCENE_ID>` preserve story state, build, and history.
+Use `disco start --reset [SCENE_ID] [--build=NAME]` or `disco reset` only for a new game; save slots are retained.
+Old saves without build/skill values load with balanced defaults; their original build cannot be recovered.

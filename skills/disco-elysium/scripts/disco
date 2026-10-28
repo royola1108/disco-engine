@@ -81,7 +81,7 @@ const commands = {
   async start(args) {
     const sceneId = args.find(a => /^\d+$/.test(a)) ? parseInt(args.find(a => /^\d+$/.test(a)), 10) : undefined;
     const build = args.find(a => a.startsWith("--build="))?.split("=")[1];
-    console.log(await callApi("start", { sceneId, build }));
+    console.log(await callApi("start", { sceneId, build, reset: args.includes("--reset") }));
   },
 
   async build(args) {
@@ -129,16 +129,15 @@ const commands = {
   },
 
   async reset() {
-    try { fs.unlinkSync(ID_FILE); } catch {}
-    console.log("Player ID cleared. Next command will create a new one.");
+    console.log(await callApi("start", { reset: true }));
   },
 
   async help() {
     console.log(`
 disco — play Disco Elysium via text
 
-  disco start [SCENE_ID] [--build=thinker|sensitive|physical|balanced]
-                            Start a new game (default: scene 142, build: balanced)
+  disco start [SCENE_ID] [--build=thinker|sensitive|physical|balanced] [--reset]
+                            Enter a scene preserving progress; --reset starts a new game
   disco build [NAME]          Change character build (thinker/sensitive/physical/balanced)
   disco play [CHOICE...]     Advance. Pass choice indices: disco play 2
     --no-auto                 Don't auto-advance through single-option nodes
@@ -152,7 +151,7 @@ disco — play Disco Elysium via text
   disco scenes [SEARCH]       List scenes, optionally filter by title
   disco players               List all active players on the server
   disco whoami                Show your player ID
-  disco reset                 Reset your player ID (start a fresh game)
+  disco reset                 Start a fresh game (clears current progress, keeps save slots)
   disco token [TOKEN]         Set or check your access token
   disco help                  This message
 

@@ -84,7 +84,6 @@ export class Engine extends EventEmitter {
   startScene(conversationId: number): PlayResult {
     this.currentConv = conversationId;
     this.currentDlg = START_DIALOGUE_ID;
-    this.history = [];
     return this.play({ autoAdvance: true, stopAt: ["no_choices", "check"] });
   }
 

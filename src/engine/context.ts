@@ -5,13 +5,7 @@ import { FunctionRegistry } from "../engine/eval.js";
 import { Engine } from "../engine/Engine.js";
 import { registerDiscoFunctions } from "../adapters/disco/DiscoFunctions.js";
 
-const ALL_SKILLS = [
-  "Logic", "Encyclopedia", "Rhetoric", "Drama", "Conceptualization", "Visual Calculus",
-  "Volition", "Inland Empire", "Empathy", "Authority", "Esprit de Corps", "Suggestion",
-  "Endurance", "Pain Threshold", "Physical Instrument", "Electrochemistry", "Shivers", "Half Light",
-  "Hand/Eye Coordination", "Perception", "Perception (Hearing)", "Perception (Sight)",
-  "Reaction Speed", "Savoir Faire", "Interfacing", "Composure",
-];
+import { ALL_SKILLS } from "../adapters/disco/builds.js";
 
 export interface GameContext {
   rom: RomDb;
@@ -35,4 +29,18 @@ export function createGameContext(dbPath: string, savesDir: string): GameContext
   const engine = new Engine(rom, state, registry);
 
   return { rom, state, registry, engine, saves };
+}
+
+export function startGame(ctx: GameContext, sceneId: number, reset = false, build?: string) {
+  if (reset) {
+    const fresh = new WorldState();
+    fresh.initFromRom(ctx.rom.getAllVariableDefs());
+    fresh.initSkills(build ?? "balanced", ALL_SKILLS);
+    fresh.party.add("kim");
+    ctx.state.restore(fresh.snapshot());
+    ctx.engine.history = [];
+  } else if (build !== undefined) {
+    ctx.state.initSkills(build, ALL_SKILLS);
+  }
+  return ctx.engine.startScene(sceneId);
 }

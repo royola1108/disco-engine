@@ -4,7 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { createServer as createHttpServer } from "node:http";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
-import type { GameContext } from "../engine/context.js";
+import { startGame, type GameContext } from "../engine/context.js";
 import type { PlayResult } from "../engine/Engine.js";
 import { formatTrace, formatOptions } from "../engine/format.js";
 
@@ -23,19 +23,18 @@ export function createMcpServer(ctx: GameContext): McpServer {
     {
       title: "Start Game",
       description:
-        "Start a new game or jump to a specific scene. Initializes world state and plays forward to the first decision point. Returns the opening dialogue trace and available options.",
+        "Enter a scene preserving world state, or set reset=true for a new game. Plays forward to the first decision point. Returns the opening dialogue trace and available options.",
       inputSchema: {
+        reset: z.boolean().optional().describe("Reset all progress for a new game."),
         sceneId: z
           .number()
           .optional()
           .describe("Conversation/scene ID to start at. If omitted, starts at scene 1 (the first scene)."),
       },
     },
-    async ({ sceneId }) => {
+    async ({ sceneId, reset }) => {
       const id = sceneId ?? 1;
-      ctx.state.initFromRom(ctx.rom.getAllVariableDefs());
-      ctx.state.party.add("kim");
-      const result = ctx.engine.startScene(id);
+      const result = startGame(ctx, id, reset);
       const scene = ctx.rom.getScene(id);
       const text =
         `=== SCENE ${id}: ${scene?.title ?? "?"} ===\n` +

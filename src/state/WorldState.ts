@@ -1,6 +1,6 @@
 import type { Value } from "../engine/ast.js";
 import type { VariableDef } from "../engine/types.js";
-import { getSkillValue } from "../adapters/disco/builds.js";
+import { ALL_SKILLS, getSkillValue } from "../adapters/disco/builds.js";
 
 export interface Skills {
   volition: { current: number; damage: number };
@@ -16,6 +16,8 @@ export interface WorldStateData {
   time: { day: number; hour: number; totalHours: number };
   reputation: Record<string, number>;
   skills: Skills;
+  build?: string;
+  skillValues?: Record<string, number>;
   money: number;
   thc: { known: string[]; fixed: string[]; cooking: string | null };
   political: string | null;
@@ -89,6 +91,8 @@ export class WorldState {
 
   snapshot(): WorldStateData {
     return {
+      build: this.build,
+      skillValues: Object.fromEntries(this.skillValues),
       variables: Object.fromEntries(this.variables),
       inventory: [...this.inventory],
       equipped: Object.fromEntries(this.equipped),
@@ -106,6 +110,9 @@ export class WorldState {
   }
 
   restore(data: WorldStateData): void {
+    this.initSkills(data.build ?? "balanced", ALL_SKILLS);
+    if (data.skillValues) this.skillValues = new Map(Object.entries(data.skillValues));
+    this.gotoScene = null;
     this.variables = new Map(Object.entries(data.variables));
     this.inventory = new Set(data.inventory);
     this.equipped = new Map(Object.entries(data.equipped));

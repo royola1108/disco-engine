@@ -10,15 +10,9 @@ import { TokenManager } from "./engine/TokenManager.js";
 import { createMcpServer } from "./mcp/server.js";
 import { attachWebSocket } from "./web/websocket.js";
 import { formatTrace, formatOptions } from "./engine/format.js";
-import type { GameContext } from "./engine/context.js";
+import { startGame, type GameContext } from "./engine/context.js";
 
-const ALL_SKILLS = [
-  "Logic", "Encyclopedia", "Rhetoric", "Drama", "Conceptualization", "Visual Calculus",
-  "Volition", "Inland Empire", "Empathy", "Authority", "Esprit de Corps", "Suggestion",
-  "Endurance", "Pain Threshold", "Physical Instrument", "Electrochemistry", "Shivers", "Half Light",
-  "Hand/Eye Coordination", "Perception", "Perception (Hearing)", "Perception (Sight)",
-  "Reaction Speed", "Savoir Faire", "Interfacing", "Composure",
-];
+import { ALL_SKILLS } from "./adapters/disco/builds.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.DISCO_DB ?? join(__dirname, "..", "data", "disco.db");
@@ -95,11 +89,8 @@ async function main() {
         switch (toolName) {
           case "start": {
             const id = args.sceneId ?? 142;
-            const build = args.build ?? "balanced";
-            p.state.initFromRom(rom.getAllVariableDefs());
-            p.state.initSkills(build, ALL_SKILLS);
-            p.state.party.add("kim");
-            const result = p.engine.startScene(id);
+            const result = startGame(p, id, args.reset === true, args.build);
+            const build = p.state.build;
             const scene = rom.getScene(id);
             respond(`=== SCENE ${id}: ${scene?.title ?? "?"} ===\n` +
               `[Character build: ${build}] ` +

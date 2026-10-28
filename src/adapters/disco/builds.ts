@@ -32,6 +32,8 @@ const SKILL_ATTRIBUTE: Record<string, string> = {
   "Interfacing": "motorics", "Composure": "motorics",
 };
 
+export const ALL_SKILLS = Object.keys(SKILL_ATTRIBUTE);
+
 export const BUILDS: Record<string, SkillBuild> = {
   thinker: {
     name: "Thinker",

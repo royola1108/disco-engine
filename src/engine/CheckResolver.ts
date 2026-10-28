@@ -44,12 +44,7 @@ export class CheckResolver {
     const rollSum = roll1 + roll2;
     const total = rollSum + skillVal + modTotal;
 
-    let passed: boolean;
-    if (isRed) {
-      passed = roll1 === roll2 && rollSum >= difficulty;
-    } else {
-      passed = total >= difficulty;
-    }
+    const passed = rollSum === 12 || (rollSum !== 2 && total >= difficulty);
 
     if (flagName) {
       this.state.setVar(flagName, passed);
