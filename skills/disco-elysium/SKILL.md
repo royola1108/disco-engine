@@ -145,3 +145,5 @@ Use `disco start --reset [SCENE_ID] [--build=NAME]` or `disco reset` only for a 
 Old saves without build/skill values load with balanced defaults; their original build cannot be recovered.
 
 Player lists and the web observer are restricted to your token's own player. Player IDs are opaque; existing save directories migrate on server startup. Back up `data/tokens.txt.player-key` alongside tokens and saves; losing it changes player IDs. Save slot names accept 1-100 letters, digits, underscores or hyphens.
+
+`disco whoami` queries the server for your authenticated player ID; the old local `~/.disco-player-id` file is ignored. Token formats do not restrict new players. Nested historical save directories require manual migration; paths outside the save root are never automatically migrated.

@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, statSync, renameSync } from "node:fs";
 import { createHmac, randomBytes } from "node:crypto";
-import { resolve, dirname } from "node:path";
+import { resolve, dirname, relative, isAbsolute, sep } from "node:path";
 
 export class TokenManager {
   private tokens = new Set<string>();
@@ -49,7 +49,14 @@ export class TokenManager {
     for (const token of tokens) {
       const prefix = token.slice(0, 12);
       const oldPath = resolve(root, prefix);
-      if (dirname(oldPath) !== root) throw new Error("Unsafe legacy player ID");
+      if (dirname(oldPath) !== root) {
+        const legacyPath = relative(root, oldPath);
+        if (legacyPath && legacyPath !== ".." && !legacyPath.startsWith(`..${sep}`) &&
+            !isAbsolute(legacyPath) && existsSync(oldPath)) {
+          throw new Error("Nested legacy saves require manual migration");
+        }
+        continue;
+      }
       if (!existsSync(oldPath)) continue;
       if (tokens.filter(t => t.slice(0, 12) === prefix).length !== 1) {
         throw new Error("Ambiguous legacy save ownership; migration required");

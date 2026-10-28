@@ -10,7 +10,7 @@ import { TokenManager } from '../src/engine/TokenManager.ts';
 const exec = promisify(execFile);
 test('CLI start, scene change, save/load and reset through REST', async () => {
   const dir = await mkdtemp(join(tmpdir(),'disco-cli-'));
-  const token = 'tiny';
+  const token = 'abc/defghijklmnopqrst';
   const otherToken = 'another-player';
   await writeFile(join(dir,'tokens.txt'),token+'\n'+otherToken+'\n');
   await copyFile('skills/disco-elysium/scripts/disco',join(dir,'disco.cjs'));
@@ -44,6 +44,11 @@ test('CLI start, scene change, save/load and reset through REST', async () => {
     assert.equal(after.state.build,'thinker'); assert.equal(after.state.skillValues.Logic,9);
     const tm = new TokenManager(join(dir,'tokens.txt'));
     const ownId=tm.playerId(token), otherId=tm.playerId(otherToken);
+    await assert.rejects(readFile(join(dir,'.disco-player-id')),e=>e.code==='ENOENT');
+    await writeFile(join(dir,'.disco-player-id'),'obsolete-local-id');
+    assert.equal((await cli('whoami')).trim(),`You are player: ${ownId}`);
+    assert.equal(await readFile(join(dir,'.disco-player-id'),'utf8'),'obsolete-local-id');
+    const status=await cli('status');assert(status.includes(`Player: ${ownId}`));
     const request=async(tool,args,t=token)=>fetch(`${env.DISCO_SERVER}/api/${tool}`,{
       method:'POST',headers:{'X-Auth-Token':t,'Content-Type':'application/json'},body:JSON.stringify(args)
     });
@@ -55,11 +60,11 @@ test('CLI start, scene change, save/load and reset through REST', async () => {
     }
     const wsBase=env.DISCO_SERVER.replace('http:','ws:')+'/ws';
     await new Promise((resolve,reject)=>{
-      const ws=new WebSocket(`${wsBase}?token=${token}&player=${ownId}`);
+      const ws=new WebSocket(`${wsBase}?token=${encodeURIComponent(token)}&player=${ownId}`);
       ws.on('message',data=>{try {assert.equal(JSON.parse(data).playerId,ownId);ws.close();resolve();}catch(e){ws.close();reject(e);}});
       ws.on('error',reject);
     });
-    for(const query of [`token=${token}&player=${otherId}`,'token=invalid']) {
+    for(const query of [`token=${encodeURIComponent(token)}&player=${otherId}`,'token=invalid']) {
       await new Promise((resolve,reject)=>{
         const ws=new WebSocket(`${wsBase}?${query}`);
         ws.on('unexpected-response',(_req,res)=>{res.resume();try{assert.equal(res.statusCode,401);resolve();}catch(e){reject(e);} ws.terminate();});

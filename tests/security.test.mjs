@@ -50,3 +50,23 @@ test('every save operation rejects traversal and invalid slot names; normal roun
   await store.delete('chapter-1_ok');assert.equal(await store.load('chapter-1_ok'),null);
  } finally {await rm(dir,{recursive:true,force:true});}
 });
+test('slash-bearing tokens work without legacy saves; nested legacy saves require manual migration',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'disco-token-format-'));
+ try {
+  const path=join(dir,'tokens.txt'),saves=join(dir,'saves');
+  const token='abc/defghijklmnopqrst';await writeFile(path,token+'\n');
+  const tm=new TokenManager(path);
+  assert(tm.valid(token));tm.migrateSaves(saves);
+  await mkdir(saves);tm.migrateSaves(saves);
+  const id=tm.playerId(token);assert.match(id,/^[a-f0-9]{64}$/);
+  assert.equal(new TokenManager(path).playerId(token),id);
+  const legacy=join(saves,token.slice(0,12));await mkdir(legacy,{recursive:true});
+  await writeFile(join(legacy,'auto.json'),'legacy progress');
+  assert.throws(()=>tm.migrateSaves(saves),/manual migration/);
+  assert.equal(await readFile(join(legacy,'auto.json'),'utf8'),'legacy progress');
+  await writeFile(path,'../outside\n');
+  await mkdir(join(dir,'outside'));await writeFile(join(dir,'outside','auto.json'),'outside sentinel');
+  new TokenManager(path).migrateSaves(saves);
+  assert.equal(await readFile(join(dir,'outside','auto.json'),'utf8'),'outside sentinel');
+ } finally {await rm(dir,{recursive:true,force:true});}
+});

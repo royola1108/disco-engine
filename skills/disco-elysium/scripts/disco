@@ -5,12 +5,10 @@
 const fs = require("fs");
 const path = require("path");
 const os = require("os");
-const crypto = require("crypto");
 
 const DEFAULT_SERVER = "https://disco.royola.dev";
 const SERVER = (process.env.DISCO_SERVER || DEFAULT_SERVER).replace(/\/$/, "");
 const API = SERVER + "/api";
-const ID_FILE = path.join(os.homedir(), ".disco-player-id");
 const TOKEN_FILE = path.join(os.homedir(), ".disco-token");
 
 function getToken() {
@@ -19,25 +17,9 @@ function getToken() {
   try { return fs.readFileSync(TOKEN_FILE, "utf-8").trim(); } catch { return ""; }
 }
 
-function getPlayerId() {
-  try { return fs.readFileSync(ID_FILE, "utf-8").trim(); }
-  catch { return null; }
-}
-
-function ensurePlayerId() {
-  let id = getPlayerId();
-  if (!id) {
-    id = crypto.randomBytes(4).toString("hex");
-    fs.writeFileSync(ID_FILE, id, "utf-8");
-    console.error(`[disco] New player ID created: ${id}`);
-  }
-  return id;
-}
-
 async function callApi(tool, args = {}) {
-  const playerId = ensurePlayerId();
   const token = getToken();
-  const headers = { "content-type": "application/json", "X-Player-Id": playerId };
+  const headers = { "content-type": "application/json" };
   if (token) headers["X-Auth-Token"] = token;
   const res = await fetch(`${API}/${tool}`, {
     method: "POST",
@@ -123,9 +105,10 @@ const commands = {
   async players() { console.log(await callApi("players")); },
 
   async whoami() {
-    const id = getPlayerId();
-    if (id) console.log(`You are player: ${id}`);
-    else console.log("No player ID yet. Run any command to create one.");
+    const status = await callApi("status");
+    const id = /^Player: (\S+)$/m.exec(status)?.[1];
+    if (!id) throw new Error("Server did not return a player ID");
+    console.log(`You are player: ${id}`);
   },
 
   async reset() {
@@ -155,7 +138,7 @@ disco — play Disco Elysium via text
   disco token [TOKEN]         Set or check your access token
   disco help                  This message
 
-Your player ID is stored in ~/.disco-player-id.
+Your player ID comes from the server for your access token.
 Your access token is stored in ~/.disco-token (or set DISCO_TOKEN env var).
 Each AI/player gets independent game state. Use DISCO_SERVER to override.
 Server: ${SERVER}
