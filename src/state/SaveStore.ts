@@ -1,5 +1,5 @@
 import { promises as fs } from "node:fs";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 import type { WorldStateData } from "./WorldState.js";
 
 export interface SaveSlot {
@@ -15,7 +15,15 @@ export interface SaveSlot {
 export class SaveStore {
   constructor(private dir: string) {}
 
+  private slotPath(slot: string): string {
+    if (typeof slot !== "string" || !/^[A-Za-z0-9_-]{1,100}$/.test(slot)) {
+      throw new RangeError("Invalid save slot: use 1-100 letters, digits, underscores or hyphens");
+    }
+    return join(this.dir, `${slot}.json`);
+  }
+
   async save(slot: string, state: WorldStateData, currentConv: number, currentDlg: number, label = "", persona: unknown = null): Promise<void> {
+    const path = this.slotPath(slot);
     await fs.mkdir(this.dir, { recursive: true });
     const data: SaveSlot = {
       slot,
@@ -26,13 +34,13 @@ export class SaveStore {
       savedAt: new Date().toISOString(),
       label,
     };
-    const path = join(this.dir, `${slot}.json`);
     await fs.writeFile(path, JSON.stringify(data, null, 2), "utf-8");
   }
 
   async load(slot: string): Promise<SaveSlot | null> {
+    const path = this.slotPath(slot);
     try {
-      const raw = await fs.readFile(join(this.dir, `${slot}.json`), "utf-8");
+      const raw = await fs.readFile(path, "utf-8");
       return JSON.parse(raw) as SaveSlot;
     } catch {
       return null;
@@ -56,6 +64,6 @@ export class SaveStore {
   }
 
   async delete(slot: string): Promise<void> {
-    await fs.unlink(join(this.dir, `${slot}.json`)).catch(() => {});
+    await fs.unlink(this.slotPath(slot)).catch(() => {});
   }
 }

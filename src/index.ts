@@ -36,6 +36,8 @@ async function main() {
     return;
   }
 
+  tokens.migrateSaves(SAVES_DIR);
+
   const indexHtml = readFileSync(join(__dirname, "web", "public", "index.html"), "utf-8");
 
   // Helper: extract token from request (header or query param)
@@ -185,7 +187,8 @@ async function main() {
             return;
           }
           case "players": {
-            const list = players.list();
+            players.getOrCreate(playerId);
+            const list = players.list().filter(p => p.playerId === playerId);
             if (!list.length) { respond("(no active players)"); return; }
             respond(list.map((p) => `${p.playerId}: ${p.scene} (last active: ${p.lastActive})`).join("\n"));
             return;
@@ -195,7 +198,7 @@ async function main() {
             return;
         }
       } catch (e) {
-        res.writeHead(500, { "Content-Type": "text/plain" });
+        res.writeHead(e instanceof RangeError ? 400 : 500, { "Content-Type": "text/plain" });
         res.end(`Error: ${(e as Error).message}`);
       }
       return;

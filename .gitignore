@@ -10,3 +10,5 @@ server.log
 .token-temp
 data/tokens.txt
 check-skills.py
+
+*.player-key

@@ -149,7 +149,7 @@ disco — play Disco Elysium via text
   disco load [SLOT]           Load from slot
   disco saves                 List all save slots
   disco scenes [SEARCH]       List scenes, optionally filter by title
-  disco players               List all active players on the server
+  disco players               Show your own player on the server
   disco whoami                Show your player ID
   disco reset                 Start a fresh game (clears current progress, keeps save slots)
   disco token [TOKEN]         Set or check your access token

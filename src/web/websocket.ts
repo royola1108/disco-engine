@@ -19,7 +19,18 @@ interface ClientInfo {
 }
 
 export function attachWebSocket(httpServer: Server, players: PlayerManager, tokens: TokenManager): WebSocketServer {
-  const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+  function authorizedPlayer(req: IncomingMessage): string | null {
+    const url = new URL(req.url ?? "/ws", "http://x");
+    const token = url.searchParams.get("token");
+    if (!token || !tokens.valid(token)) return null;
+    const playerId = tokens.playerId(token);
+    const requested = url.searchParams.get("player");
+    return requested && requested !== playerId ? null : playerId;
+  }
+  const wss = new WebSocketServer({
+    server: httpServer, path: "/ws",
+    verifyClient: ({ req }: { req: IncomingMessage }) => authorizedPlayer(req) !== null,
+  });
   const clients = new Map<WebSocket, ClientInfo>();
 
   // Track which players already have event listeners attached
@@ -59,18 +70,8 @@ export function attachWebSocket(httpServer: Server, players: PlayerManager, toke
   }
 
   wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
-    // Auth check — token from query param
-    const url = new URL(req.url ?? "/ws", "http://x");
-    const token = url.searchParams.get("token");
-    if (!token || !tokens.valid(token)) {
-      ws.close(4001, "Unauthorized");
-      return;
-    }
-
-    // playerId from token, optional player override for observer
-    const tokenPlayerId = tokens.playerId(token);
-    const overridePlayer = url.searchParams.get("player");
-    const playerId = overridePlayer || tokenPlayerId;
+    const playerId = authorizedPlayer(req);
+    if (!playerId) { ws.close(4001, "Unauthorized"); return; }
     let pctx: PlayerContext | null = null;
 
     if (playerId) {

@@ -143,3 +143,5 @@ session management needed. Game state persists on the server between calls.
 Scene changes with `disco start <SCENE_ID>` preserve story state, build, and history.
 Use `disco start --reset [SCENE_ID] [--build=NAME]` or `disco reset` only for a new game; save slots are retained.
 Old saves without build/skill values load with balanced defaults; their original build cannot be recovered.
+
+Player lists and the web observer are restricted to your token's own player. Player IDs are opaque; existing save directories migrate on server startup. Back up `data/tokens.txt.player-key` alongside tokens and saves; losing it changes player IDs. Save slot names accept 1-100 letters, digits, underscores or hyphens.
